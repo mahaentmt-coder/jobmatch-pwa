@@ -50,13 +50,21 @@ Respond ONLY with a valid JSON object (no markdown, no preamble, no backticks):
 }}"""
 
             result = self._call_claude(prompt, max_tokens=2000)
-            data = json.loads(result)
+            data = json.loads(self._extract_json(result))
             self._json(data)
 
         except json.JSONDecodeError as e:
             self._json({"error": f"Failed to parse AI response: {str(e)}"}, 500)
         except Exception as e:
             self._json({"error": str(e)}, 500)
+
+    def _extract_json(self, text: str) -> str:
+        """Strip any text before/after the JSON object."""
+        start = text.find('{')
+        end   = text.rfind('}')
+        if start == -1 or end == -1:
+            raise ValueError(f"No JSON found in response: {text[:200]}")
+        return text[start:end+1]
 
     def _call_claude(self, prompt: str, max_tokens: int = 2000) -> str:
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
