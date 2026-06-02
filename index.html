@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JobMatch">
+<link rel="manifest" href="/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<title>JobMatch AI</title>
+<style>
+  :root {
+    --bg:        #0a0f1e;
+    --surface:   #111827;
+    --card:      #1a2235;
+    --border:    #1e3a5f;
+    --primary:   #3b82f6;
+    --accent:    #06b6d4;
+    --gold:      #f59e0b;
+    --success:   #10b981;
+    --danger:    #ef4444;
+    --text:      #f1f5f9;
+    --muted:     #64748b;
+    --subtle:    #334155;
+    --radius:    16px;
+    --tab-h:     64px;
+    --header-h:  56px;
+    --font:      'Syne', sans-serif;
+    --mono:      'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  .header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .header-logo {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+  }
+
+  /* ── Scroll area ── */
+  .screen {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    padding-bottom: calc(var(--tab-h) + 16px);
+    -webkit-overflow-scrolling: touch;
+  }
+  .screen.active { display: block; }
+
+  /* ── Bottom tabs ── */
+  .tabs {
+    height: var(--tab-h);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    flex-shrink: 0;
+  }
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 10px;
+    font-weight: 500;
+    transition: color 0.2s;
+    padding: 0;
+    position: relative;
+  }
+  .tab.active { color: var(--primary); }
+  .tab.active::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 20%; right: 20%;
+    height: 2px;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    border-radius: 0 0 4px 4px;
+  }
+  .tab-icon { font-size: 22px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  /* ── Form elements ── */
+  textarea, input[type=text], input[type=email], select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    padding: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+    resize: none;
+  }
+  textarea:focus, input:focus, select:focus { border-color: var(--primary); }
+  textarea { min-height: 120px; }
+  select option { background: var(--surface); }
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 6px;
+    margin-top: 12px;
+  }
+  label:first-child { margin-top: 0; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+  }
+  .btn-secondary {
+    background: var(--subtle);
+    color: var(--text);
+  }
+  .btn-gold {
+    background: linear-gradient(135deg, var(--gold), #f97316);
+    color: #0a0f1e;
+  }
+  .btn-success {
+    background: linear-gradient(135deg, var(--success), #0ea5e9);
+    color: white;
+  }
+  .btn-sm {
+    width: auto;
+    padding: 8px 14px;
+    font-size: 12px;
+    margin-top: 0;
+    border-radius: 8px;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Score ring ── */
+  .score-ring-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .score-ring {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+  }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring-num {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 500;
+  }
+  .score-info { flex: 1; }
+  .score-job { font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .score-company { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .score-rec { font-size: 11px; margin-top: 6px; padding: 4px 10px; border-radius: 20px; display: inline-block; font-weight: 600; }
+  .rec-apply { background: rgba(16,185,129,0.15); color: var(--success); }
+  .rec-tailor { background: rgba(245,158,11,0.15); color: var(--gold); }
+  .rec-skip { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  /* ── Tags ── */
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 400;
+  }
+  .tag-match { background: rgba(16,185,129,0.15); color: var(--success); }
+  .tag-miss  { background: rgba(239,68,68,0.15);  color: var(--danger); }
+  .tag-added { background: rgba(59,130,246,0.15); color: var(--primary); }
+
+  /* ── Sections in tailor output ── */
+  .tailor-section { margin-bottom: 16px; }
+  .tailor-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .tailor-section-title { font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+  .tailor-text {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+  }
+
+  /* ── Job search result cards ── */
+  .job-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .job-card.selected { border-color: var(--primary); }
+  .job-card-title { font-size: 14px; font-weight: 700; }
+  .job-card-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .job-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+  /* ── Tracker ── */
+  .track-card {
+    background: var(--card);
+    border-left: 3px solid var(--border);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .track-card.applied   { border-color: var(--primary); }
+  .track-card.interview { border-color: var(--gold); }
+  .track-card.offer     { border-color: var(--success); }
+  .track-card.rejected  { border-color: var(--danger); }
+  .track-info { flex: 1; }
+  .track-title { font-size: 13px; font-weight: 700; }
+  .track-company { font-size: 11px; color: var(--muted); }
+  .track-date { font-size: 10px; font-family: var(--mono); color: var(--muted); margin-top: 4px; }
+  .track-status {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    margin-left: 10px;
+  }
+  .status-applied   { background: rgba(59,130,246,0.15); color: var(--primary); }
+  .status-interview { background: rgba(245,158,11,0.15); color: var(--gold); }
+  .status-offer     { background: rgba(16,185,129,0.15); color: var(--success); }
+  .status-rejected  { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: calc(var(--tab-h) + 16px);
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--text);
+    color: var(--bg);
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0;
+    transition: all 0.3s;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Loading spinner ── */
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+  }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-text { font-size: 14px; }
+
+  /* ── Divider ── */
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  /* ── Stats row ── */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
+  .stat-num { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--primary); }
+  .stat-label { font-size: 10px; color: var(--muted); margin-top: 2px; font-weight: 600; letter-spacing: 0.5px; }
+
+  /* ── Section heading ── */
+  .section-heading {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    letter-spacing: -0.5px;
+  }
+  .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 0; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-logo">JobMatch AI</div>
+  <div class="header-badge">POWERED BY CLAUDE</div>
+</div>
+
+<!-- Screens -->
+
+<!-- RESUME -->
+<div class="screen active" id="screen-resume">
+  <div class="section-heading">Your Resume</div>
+  <div class="section-sub">Paste your resume text once — used for all matching</div>
+
+  <div class="card">
+    <div class="card-title">Resume Text</div>
+    <textarea id="resumeText" placeholder="Paste your full resume text here..." style="min-height:220px"></textarea>
+    <button class="btn btn-primary" onclick="saveResume()">💾 Save Resume</button>
+  </div>
+
+  <div class="card" id="resumeStats" style="display:none">
+    <div class="card-title">Saved Resume</div>
+    <div class="stats">
+      <div class="stat"><div class="stat-num" id="wordCount">0</div><div class="stat-label">WORDS</div></div>
+      <div class="stat"><div class="stat-num" id="charCount">0</div><div class="stat-label">CHARS</div></div>
+      <div class="stat"><div class="stat-num" id="lineCount">0</div><div class="stat-label">LINES</div></div>
+    </div>
+    <button class="btn btn-secondary" onclick="clearResume()" style="margin-top:8px">🗑 Clear Resume</button>
+  </div>
+</div>
+
+<!-- SEARCH -->
+<div class="screen" id="screen-search">
+  <div class="section-heading">Job Search</div>
+  <div class="section-sub">Search jobs or paste a job description</div>
+
+  <div class="card">
+    <div class="card-title">Paste Job Description</div>
+    <label>Job Title</label>
+    <input type="text" id="pasteTitle" placeholder="e.g. Service Delivery Director">
+    <label>Company</label>
+    <input type="text" id="pasteCompany" placeholder="e.g. Salesforce">
+    <label>Location</label>
+    <input type="text" id="pasteLocation" placeholder="e.g. Dubai">
+    <label>Job Description</label>
+    <textarea id="pasteJD" placeholder="Paste the full job description here..." style="min-height:160px"></textarea>
+    <button class="btn btn-primary" onclick="addManualJob()">➕ Add Job</button>
+  </div>
+
+  <div id="jobList"></div>
+</div>
+
+<!-- MATCH -->
+<div class="screen" id="screen-match">
+  <div class="section-heading">Match Score</div>
+  <div class="section-sub">AI-powered resume-to-job analysis</div>
+
+  <div id="matchJobPicker" class="card">
+    <div class="card-title">Select a Job to Match</div>
+    <select id="matchJobSelect">
+      <option value="">— Choose a saved job —</option>
+    </select>
+    <button class="btn btn-primary" id="matchBtn" onclick="runMatch()">🎯 Analyse Match</button>
+  </div>
+
+  <div id="matchResult"></div>
+</div>
+
+<!-- TAILOR -->
+<div class="screen" id="screen-tailor">
+  <div class="section-heading">Tailor CV</div>
+  <div class="section-sub">AI rewrites your CV for any job</div>
+
+  <div class="card">
+    <div class="card-title">Select Job to Tailor For</div>
+    <select id="tailorJobSelect">
+      <option value="">— Choose a saved job —</option>
+    </select>
+    <button class="btn btn-gold" id="tailorBtn" onclick="runTailor()">✨ Tailor My CV</button>
+  </div>
+
+  <div id="tailorResult"></div>
+</div>
+
+<!-- TRACK -->
+<div class="screen" id="screen-track">
+  <div class="section-heading">Applications</div>
+  <div class="section-sub">Track your job applications</div>
+
+  <div class="stats" id="trackStats">
+    <div class="stat"><div class="stat-num" id="stat-applied">0</div><div class="stat-label">APPLIED</div></div>
+    <div class="stat"><div class="stat-num" id="stat-interview">0</div><div class="stat-label">INTERVIEW</div></div>
+    <div class="stat"><div class="stat-num" id="stat-offer">0</div><div class="stat-label">OFFERS</div></div>
+  </div>
+
+  <div id="trackList"></div>
+</div>
+
+<!-- Bottom tabs -->
+<nav class="tabs">
+  <button class="tab active" onclick="switchTab('resume',this)">
+    <span class="tab-icon">📄</span>Resume
+  </button>
+  <button class="tab" onclick="switchTab('search',this)">
+    <span class="tab-icon">🔍</span>Search
+  </button>
+  <button class="tab" onclick="switchTab('match',this)">
+    <span class="tab-icon">🎯</span>Match
+  </button>
+  <button class="tab" onclick="switchTab('tailor',this)">
+    <span class="tab-icon">✨</span>Tailor
+  </button>
+  <button class="tab" onclick="switchTab('track',this)">
+    <span class="tab-icon">📊</span>Track
+  </button>
+</nav>
+
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let jobs  = JSON.parse(localStorage.getItem('jm_jobs')  || '[]');
+let apps  = JSON.parse(localStorage.getItem('jm_apps')  || '[]');
+let resume = localStorage.getItem('jm_resume') || '';
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(function init() {
+  if (resume) {
+    document.getElementById('resumeText').value = resume;
+    showResumeStats(resume);
+  }
+  renderJobList();
+  renderJobSelects();
+  renderTracker();
+})();
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  el.classList.add('active');
+  if (name === 'match' || name === 'tailor') renderJobSelects();
+  if (name === 'track') renderTracker();
+}
+
+// ── Resume ─────────────────────────────────────────────────────────────────
+function saveResume() {
+  const text = document.getElementById('resumeText').value.trim();
+  if (!text) { toast('⚠️ Please paste your resume text first'); return; }
+  resume = text;
+  localStorage.setItem('jm_resume', text);
+  showResumeStats(text);
+  toast('✅ Resume saved!');
+}
+
+function showResumeStats(text) {
+  const words = text.trim().split(/\s+/).length;
+  const chars = text.length;
+  const lines = text.split('\n').length;
+  document.getElementById('wordCount').textContent = words;
+  document.getElementById('charCount').textContent = chars;
+  document.getElementById('lineCount').textContent = lines;
+  document.getElementById('resumeStats').style.display = 'block';
+}
+
+function clearResume() {
+  resume = '';
+  localStorage.removeItem('jm_resume');
+  document.getElementById('resumeText').value = '';
+  document.getElementById('resumeStats').style.display = 'none';
+  toast('🗑 Resume cleared');
+}
+
+// ── Jobs ───────────────────────────────────────────────────────────────────
+function addManualJob() {
+  const title    = document.getElementById('pasteTitle').value.trim();
+  const company  = document.getElementById('pasteCompany').value.trim();
+  const location = document.getElementById('pasteLocation').value.trim();
+  const jd       = document.getElementById('pasteJD').value.trim();
+  if (!title || !jd) { toast('⚠️ Title and description required'); return; }
+
+  const job = { id: Date.now().toString(), title, company, location, description: jd, added: new Date().toLocaleDateString() };
+  jobs.unshift(job);
+  saveJobs();
+  renderJobList();
+  renderJobSelects();
+
+  // Clear fields
+  ['pasteTitle','pasteCompany','pasteLocation','pasteJD'].forEach(id => document.getElementById(id).value = '');
+  toast('✅ Job added!');
+}
+
+function deleteJob(id) {
+  jobs = jobs.filter(j => j.id !== id);
+  saveJobs();
+  renderJobList();
+  renderJobSelects();
+  toast('🗑 Job removed');
+}
+
+function renderJobList() {
+  const el = document.getElementById('jobList');
+  if (!jobs.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">No jobs saved yet.<br>Paste a job description above.</div></div>`;
+    return;
+  }
+  el.innerHTML = jobs.map(j => `
+    <div class="job-card">
+      <div class="job-card-title">${j.title}</div>
+      <div class="job-card-sub">${j.company || 'Unknown company'} · ${j.location || 'Location TBC'} · ${j.added}</div>
+      <div class="job-card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="quickMatch('${j.id}')">🎯 Match</button>
+        <button class="btn btn-gold btn-sm" onclick="quickTailor('${j.id}')">✨ Tailor</button>
+        <button class="btn btn-secondary btn-sm" onclick="trackJob('${j.id}')">📋 Track</button>
+        <button class="btn btn-secondary btn-sm" style="color:var(--danger)" onclick="deleteJob('${j.id}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderJobSelects() {
+  const opts = jobs.length
+    ? `<option value="">— Choose a saved job —</option>` + jobs.map(j => `<option value="${j.id}">${j.title} — ${j.company || 'Unknown'}</option>`).join('')
+    : `<option value="">No jobs saved — go to Search tab</option>`;
+  document.getElementById('matchJobSelect').innerHTML = opts;
+  document.getElementById('tailorJobSelect').innerHTML = opts;
+}
+
+function saveJobs() { localStorage.setItem('jm_jobs', JSON.stringify(jobs)); }
+
+// ── Quick actions from job cards ───────────────────────────────────────────
+function quickMatch(id) {
+  document.getElementById('matchJobSelect').value = id;
+  document.querySelectorAll('.tab')[2].click();
+  setTimeout(() => runMatch(), 200);
+}
+function quickTailor(id) {
+  document.getElementById('tailorJobSelect').value = id;
+  document.querySelectorAll('.tab')[3].click();
+  setTimeout(() => runTailor(), 200);
+}
+
+// ── Match ──────────────────────────────────────────────────────────────────
+async function runMatch() {
+  if (!resume) { toast('⚠️ Save your resume first'); return; }
+  const jobId = document.getElementById('matchJobSelect').value;
+  if (!jobId) { toast('⚠️ Select a job first'); return; }
+  const job = jobs.find(j => j.id === jobId);
+
+  const btn = document.getElementById('matchBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Analysing...`;
+
+  const resultEl = document.getElementById('matchResult');
+  resultEl.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/match', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        resume_text:     resume,
+        job_title:       job.title,
+        company:         job.company,
+        job_description: job.description,
+        job_id:          job.id,
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderMatchResult(data);
+  } catch(e) {
+    toast('❌ ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🎯 Analyse Match';
+  }
+}
+
+function renderMatchResult(d) {
+  const score = d.match_score || 0;
+  const color = score >= 75 ? '#10b981' : score >= 55 ? '#f59e0b' : '#ef4444';
+  const recClass = d.recommendation?.toLowerCase().includes('skip') ? 'rec-skip'
+                 : d.recommendation?.toLowerCase().includes('tailor') ? 'rec-tailor' : 'rec-apply';
+
+  // SVG ring
+  const r = 28, circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
+
+  const html = `
+    <div class="card">
+      <div class="score-ring-wrap">
+        <div class="score-ring">
+          <svg width="72" height="72" viewBox="0 0 72 72">
+            <circle cx="36" cy="36" r="${r}" fill="none" stroke="var(--subtle)" stroke-width="6"/>
+            <circle cx="36" cy="36" r="${r}" fill="none" stroke="${color}" stroke-width="6"
+              stroke-dasharray="${dash} ${circ}" stroke-linecap="round"/>
+          </svg>
+          <div class="score-ring-num" style="color:${color}">${score}</div>
+        </div>
+        <div class="score-info">
+          <div class="score-job">${d.job_title}</div>
+          <div class="score-company">${d.company}</div>
+          <span class="score-rec ${recClass}">${d.recommendation}</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="card-title">✅ Matched Keywords</div>
+      <div class="tags">${(d.matched_keywords||[]).map(k=>`<span class="tag tag-match">${k}</span>`).join('')}</div>
+
+      <div class="card-title" style="margin-top:12px">❌ Missing Keywords</div>
+      <div class="tags">${(d.missing_keywords||[]).map(k=>`<span class="tag tag-miss">${k}</span>`).join('')}</div>
+
+      <div class="divider"></div>
+
+      <div class="card-title">💪 Strengths</div>
+      ${(d.strengths||[]).map(s=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);color:var(--text)">${s}</div>`).join('')}
+
+      <div class="card-title" style="margin-top:12px">⚠️ Gaps</div>
+      ${(d.gaps||[]).map(g=>`<div style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);color:var(--muted)">${g}</div>`).join('')}
+
+      <button class="btn btn-gold" style="margin-top:16px" onclick="quickTailor('${d.job_id}')">✨ Tailor CV for This Job</button>
+    </div>
+  `;
+  document.getElementById('matchResult').innerHTML = html;
+}
+
+// ── Tailor ─────────────────────────────────────────────────────────────────
+async function runTailor() {
+  if (!resume) { toast('⚠️ Save your resume first'); return; }
+  const jobId = document.getElementById('tailorJobSelect').value;
+  if (!jobId) { toast('⚠️ Select a job first'); return; }
+  const job = jobs.find(j => j.id === jobId);
+
+  const btn = document.getElementById('tailorBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Tailoring with AI...`;
+  document.getElementById('tailorResult').innerHTML = '';
+
+  try {
+    const res = await fetch('/api/tailor', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        resume_text:     resume,
+        job_description: job.description,
+        job_title:       job.title,
+        company:         job.company,
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderTailorResult(data, job);
+  } catch(e) {
+    toast('❌ ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Tailor My CV';
+  }
+}
+
+function renderTailorResult(d, job) {
+  const bullets = (d.tailored_bullets || []).join('\n• ');
+
+  const html = `
+    <div class="card">
+      <div class="card-title">🎯 Tailored for ${job.title} @ ${job.company}</div>
+
+      <div class="tailor-section">
+        <div class="tailor-section-header">
+          <div class="tailor-section-title">Professional Summary</div>
+          <button class="btn btn-secondary btn-sm" onclick="copyText('summary-text')">📋 Copy</button>
+        </div>
+        <div class="tailor-text" id="summary-text">${d.tailored_summary || ''}</div>
+      </div>
+
+      <div class="tailor-section">
+        <div class="tailor-section-header">
+          <div class="tailor-section-title">Key Bullet Points</div>
+          <button class="btn btn-secondary btn-sm" onclick="copyText('bullets-text')">📋 Copy</button>
+        </div>
+        <div class="tailor-text" id="bullets-text">• ${bullets}</div>
+      </div>
+
+      <div class="tailor-section">
+        <div class="tailor-section-header">
+          <div class="tailor-section-title">Cover Letter</div>
+          <button class="btn btn-secondary btn-sm" onclick="copyText('cover-text')">📋 Copy</button>
+        </div>
+        <div class="tailor-text" id="cover-text">${d.cover_letter || ''}</div>
+      </div>
+
+      <div class="tailor-section">
+        <div class="tailor-section-title" style="margin-bottom:8px">Keywords Added</div>
+        <div class="tags">${(d.keywords_added||[]).map(k=>`<span class="tag tag-added">${k}</span>`).join('')}</div>
+      </div>
+
+      <button class="btn btn-success" onclick="trackJobById('${job.id}')">📋 Add to Tracker</button>
+    </div>
+  `;
+  document.getElementById('tailorResult').innerHTML = html;
+}
+
+// ── Tracker ────────────────────────────────────────────────────────────────
+function trackJob(jobId) {
+  trackJobById(jobId);
+  switchTab('track', document.querySelectorAll('.tab')[4]);
+}
+
+function trackJobById(jobId) {
+  const job = jobs.find(j => j.id === jobId);
+  if (!job) return;
+  if (apps.find(a => a.jobId === jobId)) { toast('Already tracked'); return; }
+  apps.unshift({ jobId, title: job.title, company: job.company, status: 'applied', date: new Date().toLocaleDateString() });
+  localStorage.setItem('jm_apps', JSON.stringify(apps));
+  renderTracker();
+  toast('📋 Added to tracker!');
+}
+
+function updateStatus(jobId, status) {
+  const app = apps.find(a => a.jobId === jobId);
+  if (app) {
+    app.status = status;
+    localStorage.setItem('jm_apps', JSON.stringify(apps));
+    renderTracker();
+  }
+}
+
+function deleteApp(jobId) {
+  apps = apps.filter(a => a.jobId !== jobId);
+  localStorage.setItem('jm_apps', JSON.stringify(apps));
+  renderTracker();
+  toast('🗑 Removed from tracker');
+}
+
+function renderTracker() {
+  const counts = { applied:0, interview:0, offer:0, rejected:0 };
+  apps.forEach(a => counts[a.status] = (counts[a.status]||0) + 1);
+  document.getElementById('stat-applied').textContent   = counts.applied;
+  document.getElementById('stat-interview').textContent = counts.interview;
+  document.getElementById('stat-offer').textContent     = counts.offer;
+
+  const el = document.getElementById('trackList');
+  if (!apps.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No applications tracked yet.<br>Use the Track button on a job card.</div></div>`;
+    return;
+  }
+  el.innerHTML = apps.map(a => `
+    <div class="track-card ${a.status}">
+      <div class="track-info">
+        <div class="track-title">${a.title}</div>
+        <div class="track-company">${a.company || 'Unknown company'}</div>
+        <div class="track-date">Added ${a.date}</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          ${['applied','interview','offer','rejected'].map(s =>
+            `<button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:10px;${a.status===s?'border:1px solid var(--primary);color:var(--primary)':''}"
+              onclick="updateStatus('${a.jobId}','${s}')">${s}</button>`
+          ).join('')}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        <span class="track-status status-${a.status}">${a.status}</span>
+        <button class="btn btn-secondary btn-sm" style="color:var(--danger)" onclick="deleteApp('${a.jobId}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function copyText(elId) {
+  const text = document.getElementById(elId).textContent;
+  navigator.clipboard.writeText(text).then(() => toast('📋 Copied!'));
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── Service Worker ─────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(console.error);
+}
+</script>
+</body>
+</html>
