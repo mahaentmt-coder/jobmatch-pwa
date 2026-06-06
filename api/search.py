@@ -55,13 +55,14 @@ class handler(BaseHTTPRequestHandler):
                     break
 
                 params = urllib.parse.urlencode({
-                    "app_id":         app_id,
-                    "app_key":        app_key,
+                    "app_id":           app_id,
+                    "app_key":          app_key,
                     "results_per_page": min(limit, 10),
-                    "what":           title,
-                    "where":          location if location and "emea" not in loc_lower else "",
-                    "content-type":   "application/json",
-                    "sort_by":        "date",
+                    "what_phrase":      title,
+                    "title_only":       1,
+                    "where":            location if location and "emea" not in loc_lower else "",
+                    "content-type":     "application/json",
+                    "sort_by":          "date",
                 })
                 url = f"{ADZUNA_BASE}/{country}/search/1?{params}"
 
