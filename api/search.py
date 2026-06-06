@@ -1,8 +1,8 @@
 from http.server import BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.parse, urllib.error
 
-RAPIDAPI_HOST = "linkedin-job-search-api.p.rapidapi.com"
-RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/active-jb-24h"
+RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
+RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
 
 
 class handler(BaseHTTPRequestHandler):
@@ -17,7 +17,6 @@ class handler(BaseHTTPRequestHandler):
 
             title    = qs.get("title",    [""])[0].strip()
             location = qs.get("location", [""])[0].strip()
-            limit    = qs.get("limit",    ["10"])[0]
 
             if not title:
                 self._json({"error": "title parameter required"}, 400)
@@ -28,22 +27,18 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "RAPIDAPI_KEY environment variable not set"}, 500)
                 return
 
-            # Build params — omit location_filter if blank to avoid API errors
-            params_dict = {
-                "limit":            limit,
-                "offset":           "0",
-                "title_filter":     f'"{title}"',
-                "description_type": "text",
-            }
-            if location:
-                params_dict["location_filter"] = f'"{location}"'
+            query = f"{title} in {location}" if location else title
 
-            url = f"{RAPIDAPI_URL}?{urllib.parse.urlencode(params_dict)}"
+            params = urllib.parse.urlencode({
+                "query":        query,
+                "num_pages":    "1",
+                "date_posted":  "month",
+            })
+            url = f"{RAPIDAPI_URL}?{params}"
 
             req = urllib.request.Request(
                 url,
                 headers={
-                    "Content-Type":    "application/json",
                     "x-rapidapi-host": RAPIDAPI_HOST,
                     "x-rapidapi-key":  api_key,
                 },
@@ -55,30 +50,19 @@ class handler(BaseHTTPRequestHandler):
                     raw = json.loads(resp.read())
             except urllib.error.HTTPError as e:
                 body = e.read().decode("utf-8", errors="replace")
-                self._json({"error": f"RapidAPI {e.code}: {body[:300]}"}, 502)
+                self._json({"error": f"API {e.code}: {body[:300]}"}, 502)
                 return
 
-            # Normalise — API returns a list directly
-            items = raw if isinstance(raw, list) else raw.get("data", raw.get("jobs", []))
-
             jobs = []
-            for item in items:
-                company = item.get("company", "")
-                if isinstance(company, dict):
-                    company = company.get("name", "")
-
-                location_val = item.get("location", "")
-                if isinstance(location_val, dict):
-                    location_val = location_val.get("city", location_val.get("country", ""))
-
+            for item in raw.get("data", []):
                 jobs.append({
-                    "id":          str(item.get("id", item.get("job_id", ""))),
-                    "title":       item.get("title", ""),
-                    "company":     company,
-                    "location":    location_val,
-                    "description": item.get("description", item.get("job_description", "")),
-                    "url":         item.get("url", item.get("job_url", item.get("linkedin_url", ""))),
-                    "posted":      item.get("posted_at", item.get("date", item.get("created_at", ""))),
+                    "id":          item.get("job_id", ""),
+                    "title":       item.get("job_title", ""),
+                    "company":     item.get("employer_name", ""),
+                    "location":    f"{item.get('job_city', '')} {item.get('job_country', '')}".strip(),
+                    "description": item.get("job_description", ""),
+                    "url":         item.get("job_apply_link", item.get("job_google_link", "")),
+                    "posted":      item.get("job_posted_at_datetime_utc", "")[:10] if item.get("job_posted_at_datetime_utc") else "",
                 })
 
             self._json({"jobs": jobs, "count": len(jobs)})
