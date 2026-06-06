@@ -1,5 +1,5 @@
 from http.server import BaseHTTPRequestHandler
-import json, os, urllib.request, urllib.parse
+import json, os, urllib.request, urllib.parse, urllib.error
 
 RAPIDAPI_HOST = "linkedin-job-search-api.p.rapidapi.com"
 RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/active-jb-24h"
@@ -28,38 +28,57 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "RAPIDAPI_KEY environment variable not set"}, 500)
                 return
 
-            params = urllib.parse.urlencode({
+            # Build params — omit location_filter if blank to avoid API errors
+            params_dict = {
                 "limit":            limit,
                 "offset":           "0",
                 "title_filter":     f'"{title}"',
-                "location_filter":  f'"{location}"' if location else "",
                 "description_type": "text",
-            })
-            url = f"{RAPIDAPI_URL}?{params}"
+            }
+            if location:
+                params_dict["location_filter"] = f'"{location}"'
+
+            url = f"{RAPIDAPI_URL}?{urllib.parse.urlencode(params_dict)}"
 
             req = urllib.request.Request(
                 url,
                 headers={
-                    "Content-Type":   "application/json",
+                    "Content-Type":    "application/json",
                     "x-rapidapi-host": RAPIDAPI_HOST,
                     "x-rapidapi-key":  api_key,
                 },
                 method="GET"
             )
 
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                raw = json.loads(resp.read())
+            try:
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    raw = json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", errors="replace")
+                self._json({"error": f"RapidAPI {e.code}: {body[:300]}"}, 502)
+                return
+
+            # Normalise — API returns a list directly
+            items = raw if isinstance(raw, list) else raw.get("data", raw.get("jobs", []))
 
             jobs = []
-            for item in (raw if isinstance(raw, list) else raw.get("data", [])):
+            for item in items:
+                company = item.get("company", "")
+                if isinstance(company, dict):
+                    company = company.get("name", "")
+
+                location_val = item.get("location", "")
+                if isinstance(location_val, dict):
+                    location_val = location_val.get("city", location_val.get("country", ""))
+
                 jobs.append({
                     "id":          str(item.get("id", item.get("job_id", ""))),
                     "title":       item.get("title", ""),
-                    "company":     item.get("company", {}).get("name", "") if isinstance(item.get("company"), dict) else item.get("company", ""),
-                    "location":    item.get("location", ""),
-                    "description": item.get("description", ""),
-                    "url":         item.get("url", item.get("job_url", "")),
-                    "posted":      item.get("posted_at", item.get("date", "")),
+                    "company":     company,
+                    "location":    location_val,
+                    "description": item.get("description", item.get("job_description", "")),
+                    "url":         item.get("url", item.get("job_url", item.get("linkedin_url", ""))),
+                    "posted":      item.get("posted_at", item.get("date", item.get("created_at", ""))),
                 })
 
             self._json({"jobs": jobs, "count": len(jobs)})
