@@ -425,7 +425,17 @@
 <!-- SEARCH -->
 <div class="screen" id="screen-search">
   <div class="section-heading">Job Search</div>
-  <div class="section-sub">Search jobs or paste a job description</div>
+  <div class="section-sub">Search LinkedIn or paste a job description</div>
+
+  <div class="card">
+    <div class="card-title">🔍 Search LinkedIn Jobs</div>
+    <label>Job Title</label>
+    <input type="text" id="searchTitle" placeholder="e.g. Data Engineer">
+    <label>Location</label>
+    <input type="text" id="searchLocation" placeholder="e.g. United Kingdom">
+    <button class="btn btn-primary" id="searchBtn" onclick="searchLinkedIn()">🔍 Search Jobs</button>
+    <div id="searchResults"></div>
+  </div>
 
   <div class="card">
     <div class="card-title">Paste Job Description</div>
@@ -621,6 +631,66 @@ function renderJobSelects() {
 }
 
 function saveJobs() { localStorage.setItem('jm_jobs', JSON.stringify(jobs)); }
+
+// ── LinkedIn Search ────────────────────────────────────────────────────────
+async function searchLinkedIn() {
+  const title    = document.getElementById('searchTitle').value.trim();
+  const location = document.getElementById('searchLocation').value.trim();
+  if (!title) { toast('⚠️ Enter a job title to search'); return; }
+
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Searching...`;
+  document.getElementById('searchResults').innerHTML = '';
+
+  try {
+    const params = new URLSearchParams({ title, location, limit: 10 });
+    const res  = await fetch(`/api/search?${params}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    if (!data.jobs.length) {
+      document.getElementById('searchResults').innerHTML =
+        `<div class="empty" style="padding:24px 0"><div class="empty-text">No jobs found. Try a broader title or location.</div></div>`;
+      return;
+    }
+
+    document.getElementById('searchResults').innerHTML = data.jobs.map(j => `
+      <div class="job-card" style="margin-top:10px">
+        <div class="job-card-title">${j.title}</div>
+        <div class="job-card-sub">${j.company || 'Unknown'} · ${j.location || 'Location TBC'} · ${j.posted || ''}</div>
+        <div class="job-card-actions">
+          <button class="btn btn-primary btn-sm" onclick="importLinkedInJob(${JSON.stringify(j).replace(/"/g,'&quot;')})">➕ Import</button>
+          ${j.url ? `<a href="${j.url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">🔗 View</button></a>` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    toast(`✅ Found ${data.jobs.length} jobs`);
+  } catch(e) {
+    toast('❌ ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Search Jobs';
+  }
+}
+
+function importLinkedInJob(j) {
+  if (jobs.find(x => x.id === j.id)) { toast('Already saved'); return; }
+  jobs.unshift({
+    id:          j.id || Date.now().toString(),
+    title:       j.title,
+    company:     j.company,
+    location:    j.location,
+    description: j.description,
+    url:         j.url,
+    added:       new Date().toLocaleDateString(),
+  });
+  saveJobs();
+  renderJobList();
+  renderJobSelects();
+  toast(`✅ "${j.title}" imported!`);
+}
 
 // ── Quick actions from job cards ───────────────────────────────────────────
 function quickMatch(id) {
