@@ -660,12 +660,10 @@ async function searchLinkedIn() {
     searchedJobs = data.jobs;
     renderSearchResults();
 
-    // Auto-score if resume is available
-    if (resume) {
-      document.getElementById('scoreAllBtn').style.display = 'flex';
-    }
+    toast(`✅ Found ${data.jobs.length} jobs — scoring...`);
 
-    toast(`✅ Found ${data.jobs.length} jobs`);
+    // Auto-score all results if resume is available
+    if (resume) await scoreAllJobs();
   } catch(e) {
     toast('❌ ' + e.message);
   } finally {
