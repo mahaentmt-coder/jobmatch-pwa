@@ -2,7 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import json, os, urllib.request
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-20250514"  # Sonnet for higher quality tailoring
+MODEL = "claude-sonnet-4-6"  # Sonnet for higher quality tailoring
 
 
 class handler(BaseHTTPRequestHandler):

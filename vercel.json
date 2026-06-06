@@ -2,10 +2,10 @@
   "version": 2,
   "functions": {
     "api/match.py": {
-      "runtime": "python3.9"
+      "runtime": "@vercel/python@4.3.1"
     },
     "api/tailor.py": {
-      "runtime": "python3.9"
+      "runtime": "@vercel/python@4.3.1"
     }
   },
   "routes": [
