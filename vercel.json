@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "outputDirectory": ".",
-  "functions": {
+  "outputDirectory": "public",
+"functions": {
     "api/match.py": {
       "runtime": "@vercel/python@4.3.1"
     },
