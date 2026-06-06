@@ -633,6 +633,8 @@ function renderJobSelects() {
 function saveJobs() { localStorage.setItem('jm_jobs', JSON.stringify(jobs)); }
 
 // ── LinkedIn Search ────────────────────────────────────────────────────────
+let searchedJobs = []; // holds current search results
+
 async function searchLinkedIn() {
   const title    = document.getElementById('searchTitle').value.trim();
   const location = document.getElementById('searchLocation').value.trim();
@@ -655,16 +657,13 @@ async function searchLinkedIn() {
       return;
     }
 
-    document.getElementById('searchResults').innerHTML = data.jobs.map(j => `
-      <div class="job-card" style="margin-top:10px">
-        <div class="job-card-title">${j.title}</div>
-        <div class="job-card-sub">${j.company || 'Unknown'} · ${j.location || 'Location TBC'} · ${j.posted || ''}</div>
-        <div class="job-card-actions">
-          <button class="btn btn-primary btn-sm" onclick="importLinkedInJob(${JSON.stringify(j).replace(/"/g,'&quot;')})">➕ Import</button>
-          ${j.url ? `<a href="${j.url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">🔗 View</button></a>` : ''}
-        </div>
-      </div>
-    `).join('');
+    searchedJobs = data.jobs;
+    renderSearchResults();
+
+    // Auto-score if resume is available
+    if (resume) {
+      document.getElementById('scoreAllBtn').style.display = 'flex';
+    }
 
     toast(`✅ Found ${data.jobs.length} jobs`);
   } catch(e) {
@@ -675,7 +674,110 @@ async function searchLinkedIn() {
   }
 }
 
-function importLinkedInJob(j) {
+function renderSearchResults() {
+  const container = document.getElementById('searchResults');
+  if (!searchedJobs.length) { container.innerHTML = ''; return; }
+
+  const scoreAllBtn = resume
+    ? `<button id="scoreAllBtn" class="btn btn-primary" style="margin:10px 0 4px" onclick="scoreAllJobs()">🎯 Score All Against My Resume</button>`
+    : '';
+
+  container.innerHTML = scoreAllBtn + searchedJobs.map((j, i) => `
+    <div class="job-card" id="sjob-${i}" style="margin-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div class="job-card-title">${j.title}</div>
+          <div class="job-card-sub">${j.company || 'Unknown'} · ${j.location || 'Location TBC'} · ${j.posted || ''}</div>
+        </div>
+        <div id="score-badge-${i}"></div>
+      </div>
+      <div id="tailor-result-${i}"></div>
+      <div class="job-card-actions" style="margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="scoreJob(${i})">🎯 Score</button>
+        <button class="btn btn-gold btn-sm" onclick="tailorJob(${i})">✨ Tailor</button>
+        <button class="btn btn-primary btn-sm" onclick="importLinkedInJob(${i})">➕ Import</button>
+        ${j.url ? `<a href="${j.url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">🔗 View</button></a>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function scoreJob(i) {
+  if (!resume) { toast('⚠️ Save your resume first'); return; }
+  const j = searchedJobs[i];
+  const badge = document.getElementById(`score-badge-${i}`);
+  badge.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px"></span>`;
+
+  try {
+    const res = await fetch('/api/match', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ resume_text: resume, job_title: j.title, company: j.company, job_description: j.description, job_id: j.id })
+    });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    const score = d.match_score || 0;
+    const color = score >= 75 ? 'var(--success)' : score >= 55 ? 'var(--gold)' : 'var(--danger)';
+    const rec   = d.recommendation || '';
+    badge.innerHTML = `
+      <div style="text-align:center">
+        <div style="font-family:var(--mono);font-size:20px;font-weight:600;color:${color}">${score}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:2px">${rec.split(' ')[0]}</div>
+      </div>`;
+    // store score on job for sorting
+    searchedJobs[i]._score = score;
+  } catch(e) {
+    badge.innerHTML = `<span style="font-size:10px;color:var(--danger)">err</span>`;
+  }
+}
+
+async function scoreAllJobs() {
+  if (!resume) { toast('⚠️ Save your resume first'); return; }
+  const btn = document.getElementById('scoreAllBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Scoring...`; }
+  await Promise.all(searchedJobs.map((_, i) => scoreJob(i)));
+  if (btn) { btn.disabled = false; btn.innerHTML = '🎯 Score All Against My Resume'; }
+  toast('✅ All jobs scored!');
+}
+
+async function tailorJob(i) {
+  if (!resume) { toast('⚠️ Save your resume first'); return; }
+  const j = searchedJobs[i];
+  const resultEl = document.getElementById(`tailor-result-${i}`);
+  resultEl.innerHTML = `<div style="padding:8px 0;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px"><span class="spinner" style="width:14px;height:14px;border-width:2px"></span> Tailoring with AI...</div>`;
+
+  try {
+    const res = await fetch('/api/tailor', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ resume_text: resume, job_description: j.description, job_title: j.title, company: j.company })
+    });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+
+    tailorLastData = d;
+    tailorLastJob  = j;
+
+    const bullets = (d.tailored_bullets || []).map(b => `<li style="margin-bottom:4px">${b}</li>`).join('');
+    resultEl.innerHTML = `
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <div class="tailor-section-title" style="margin-bottom:6px">✨ Tailored Summary</div>
+        <div class="tailor-text" style="font-size:12px;margin-bottom:8px">${d.tailored_summary || ''}</div>
+        <div class="tailor-section-title" style="margin-bottom:6px">Key Bullets</div>
+        <ul style="font-size:12px;padding-left:16px;line-height:1.6;color:var(--text)">${bullets}</ul>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary btn-sm" onclick="copyText('tailor-sum-${i}'); document.getElementById('tailor-sum-${i}').textContent='${(d.tailored_summary||'').replace(/'/g,"&#39;")}'">📋 Copy Summary</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadResumePDF(tailorLastData,tailorLastJob)">⬇️ PDF</button>
+        </div>
+        <div id="tailor-sum-${i}" style="display:none">${d.tailored_summary||''}</div>
+      </div>`;
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--danger);font-size:12px;padding-top:6px">❌ ${e.message}</div>`;
+  }
+}
+
+function importLinkedInJob(i) {
+  const j = searchedJobs[i];
   if (jobs.find(x => x.id === j.id)) { toast('Already saved'); return; }
   jobs.unshift({
     id:          j.id || Date.now().toString(),
