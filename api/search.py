@@ -1,8 +1,10 @@
 from http.server import BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.parse, urllib.error
 
-RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
-RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
+ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
+
+# EMEA countries to search across when location is EMEA
+EMEA_COUNTRIES = ["gb", "de", "fr", "nl", "ae", "za", "sg"]
 
 
 class handler(BaseHTTPRequestHandler):
@@ -17,53 +19,83 @@ class handler(BaseHTTPRequestHandler):
 
             title    = qs.get("title",    [""])[0].strip()
             location = qs.get("location", [""])[0].strip()
+            limit    = int(qs.get("limit", ["10"])[0])
 
             if not title:
                 self._json({"error": "title parameter required"}, 400)
                 return
 
-            api_key = os.environ.get("RAPIDAPI_KEY", "")
-            if not api_key:
-                self._json({"error": "RAPIDAPI_KEY environment variable not set"}, 500)
+            app_id  = os.environ.get("ADZUNA_APP_ID", "")
+            app_key = os.environ.get("ADZUNA_APP_KEY", "")
+            if not app_id or not app_key:
+                self._json({"error": "ADZUNA_APP_ID and ADZUNA_APP_KEY environment variables not set"}, 500)
                 return
 
-            query = f"{title} in {location}" if location else title
-
-            params = urllib.parse.urlencode({
-                "query":        query,
-                "num_pages":    "1",
-                "date_posted":  "month",
-            })
-            url = f"{RAPIDAPI_URL}?{params}"
-
-            req = urllib.request.Request(
-                url,
-                headers={
-                    "x-rapidapi-host": RAPIDAPI_HOST,
-                    "x-rapidapi-key":  api_key,
-                },
-                method="GET"
-            )
-
-            try:
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    raw = json.loads(resp.read())
-            except urllib.error.HTTPError as e:
-                body = e.read().decode("utf-8", errors="replace")
-                self._json({"error": f"API {e.code}: {body[:300]}"}, 502)
-                return
+            loc_lower = location.lower()
+            if not location or "emea" in loc_lower or "worldwide" in loc_lower or "global" in loc_lower:
+                countries = EMEA_COUNTRIES
+            elif "uk" in loc_lower or "united kingdom" in loc_lower or "britain" in loc_lower:
+                countries = ["gb"]
+            elif "uae" in loc_lower or "dubai" in loc_lower or "emirates" in loc_lower:
+                countries = ["ae"]
+            elif "germany" in loc_lower or "deutschland" in loc_lower:
+                countries = ["de"]
+            elif "france" in loc_lower or "paris" in loc_lower:
+                countries = ["fr"]
+            elif "netherlands" in loc_lower or "amsterdam" in loc_lower:
+                countries = ["nl"]
+            else:
+                countries = EMEA_COUNTRIES
 
             jobs = []
-            for item in raw.get("data", []):
-                jobs.append({
-                    "id":          item.get("job_id", ""),
-                    "title":       item.get("job_title", ""),
-                    "company":     item.get("employer_name", ""),
-                    "location":    f"{item.get('job_city', '')} {item.get('job_country', '')}".strip(),
-                    "description": item.get("job_description", ""),
-                    "url":         item.get("job_apply_link", item.get("job_google_link", "")),
-                    "posted":      item.get("job_posted_at_datetime_utc", "")[:10] if item.get("job_posted_at_datetime_utc") else "",
+            seen = set()
+
+            for country in countries:
+                if len(jobs) >= limit:
+                    break
+
+                params = urllib.parse.urlencode({
+                    "app_id":         app_id,
+                    "app_key":        app_key,
+                    "results_per_page": min(limit, 10),
+                    "what":           title,
+                    "where":          location if location and "emea" not in loc_lower else "",
+                    "content-type":   "application/json",
+                    "sort_by":        "date",
                 })
+                url = f"{ADZUNA_BASE}/{country}/search/1?{params}"
+
+                req = urllib.request.Request(url, method="GET")
+
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        data = json.loads(resp.read())
+                except urllib.error.HTTPError as e:
+                    continue  # skip countries that error
+
+                for item in data.get("results", []):
+                    job_id = str(item.get("id", ""))
+                    if job_id in seen:
+                        continue
+                    seen.add(job_id)
+
+                    loc_parts = []
+                    if item.get("location", {}).get("display_name"):
+                        loc_parts.append(item["location"]["display_name"])
+
+                    jobs.append({
+                        "id":          job_id,
+                        "title":       item.get("title", ""),
+                        "company":     item.get("company", {}).get("display_name", ""),
+                        "location":    loc_parts[0] if loc_parts else country.upper(),
+                        "description": item.get("description", ""),
+                        "url":         item.get("redirect_url", ""),
+                        "posted":      item.get("created", "")[:10] if item.get("created") else "",
+                        "salary":      item.get("salary_is_predicted") and f"{item.get('salary_min','')}–{item.get('salary_max','')} {item.get('salary_currency','')}" or "",
+                    })
+
+                    if len(jobs) >= limit:
+                        break
 
             self._json({"jobs": jobs, "count": len(jobs)})
 
