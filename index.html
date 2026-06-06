@@ -430,7 +430,7 @@
   <div class="card">
     <div class="card-title">🔍 Search LinkedIn Jobs</div>
     <label>Job Title</label>
-    <input type="text" id="searchTitle" placeholder="e.g. Data Engineer" value="Digital Transformation">
+    <input type="text" id="searchTitle" placeholder="e.g. Digital Transformation Director" value="Digital Transformation Director or Executive">
     <label>Location</label>
     <input type="text" id="searchLocation" placeholder="e.g. United Kingdom" value="EMEA">
     <button class="btn btn-primary" id="searchBtn" onclick="searchLinkedIn()">🔍 Search Jobs</button>
@@ -680,12 +680,21 @@ function renderSearchResults() {
     ? `<button id="scoreAllBtn" class="btn btn-primary" style="margin:10px 0 4px" onclick="scoreAllJobs()">🎯 Score All Against My Resume</button>`
     : '';
 
-  container.innerHTML = scoreAllBtn + searchedJobs.map((j, i) => `
+  container.innerHTML = scoreAllBtn + searchedJobs.map((j, i) => {
+    const meta = [j.company || 'Unknown', j.location || 'Location TBC', j.posted || ''].filter(Boolean).join(' · ');
+    const pills = [
+      j.seniority     ? `<span class="tag" style="background:rgba(99,102,241,0.15);color:#818cf8">${j.seniority}</span>` : '',
+      j.salary        ? `<span class="tag" style="background:rgba(16,185,129,0.15);color:var(--success)">${j.salary}</span>` : '',
+      j.contract_type ? `<span class="tag" style="background:rgba(245,158,11,0.15);color:var(--gold)">${j.contract_type}</span>` : '',
+      j.contract_time ? `<span class="tag" style="background:rgba(6,182,212,0.15);color:var(--accent)">${j.contract_time.replace('_', ' ')}</span>` : '',
+    ].filter(Boolean).join('');
+    return `
     <div class="job-card" id="sjob-${i}" style="margin-top:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="flex:1">
           <div class="job-card-title">${j.title}</div>
-          <div class="job-card-sub">${j.company || 'Unknown'} · ${j.location || 'Location TBC'} · ${j.posted || ''}</div>
+          <div class="job-card-sub">${meta}</div>
+          ${pills ? `<div class="tags" style="margin-top:6px">${pills}</div>` : ''}
         </div>
         <div id="score-badge-${i}"></div>
       </div>
@@ -696,8 +705,8 @@ function renderSearchResults() {
         <button class="btn btn-primary btn-sm" onclick="importLinkedInJob(${i})">➕ Import</button>
         ${j.url ? `<a href="${j.url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">🔗 View</button></a>` : ''}
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 async function scoreJob(i) {
