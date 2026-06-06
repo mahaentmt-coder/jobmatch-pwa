@@ -59,10 +59,8 @@ class handler(BaseHTTPRequestHandler):
                     "app_key":          app_key,
                     "results_per_page": min(limit, 10),
                     "what_phrase":      title,
-                    "title_only":       1,
                     "where":            location if location and "emea" not in loc_lower else "",
                     "content-type":     "application/json",
-                    "sort_by":          "date",
                 })
                 url = f"{ADZUNA_BASE}/{country}/search/1?{params}"
 
