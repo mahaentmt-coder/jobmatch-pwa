@@ -200,7 +200,18 @@ function extractJobsFromEmail_(text) {
 // ── JSEARCH: PROACTIVE EMEA SEARCH ───────────────────────────────────────────
 // Mirrors the LinkedIn alert: "director or executive digital transformation"
 // past week, EMEA locations. Returns array of raw job objects.
-const EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands", "Switzerland", "Ireland", "Belgium"];
+const EMEA_LOCATIONS = [
+  // Western Europe
+  "UK", "Ireland", "Netherlands", "Belgium", "Luxembourg",
+  "Germany", "Austria", "Switzerland",
+  "France", "Spain", "Portugal",
+  "Denmark", "Sweden", "Norway", "Finland",
+  "Poland", "Czechia",
+  // Middle East
+  "UAE", "Saudi Arabia", "Qatar", "Bahrain", "Kuwait", "Jordan",
+  // Africa
+  "South Africa", "Egypt", "Morocco",
+];
 const SEARCH_QUERIES = [
   "Digital Transformation Director or Executive",
   "Programme Director Digital Transformation",

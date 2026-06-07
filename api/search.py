@@ -5,7 +5,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
 RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
 
-EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands", "Switzerland", "Ireland", "Belgium"]
+EMEA_LOCATIONS = [
+    # Western Europe
+    "UK", "Ireland", "Netherlands", "Belgium", "Luxembourg",
+    "Germany", "Austria", "Switzerland",
+    "France", "Spain", "Portugal",
+    "Denmark", "Sweden", "Norway", "Finland",
+    "Poland", "Czechia",
+    # Middle East
+    "UAE", "Saudi Arabia", "Qatar", "Bahrain", "Kuwait", "Jordan",
+    # Africa
+    "South Africa", "Egypt", "Morocco",
+]
 
 # Only keep jobs from trusted, high-quality publishers
 TRUSTED_PUBLISHERS = {
@@ -157,7 +168,7 @@ class handler(BaseHTTPRequestHandler):
 
             # Fetch all queries in parallel
             all_items = []
-            with ThreadPoolExecutor(max_workers=4) as pool:
+            with ThreadPoolExecutor(max_workers=8) as pool:
                 for result in as_completed([pool.submit(fetch_query, q) for q in queries]):
                     all_items.extend(result.result())
 
