@@ -71,9 +71,9 @@ function checkNewJobAlerts() {
   const props     = PropertiesService.getScriptProperties();
   const lastRun   = parseInt(props.getProperty("lastRun") || "0", 10);
   const now       = Date.now();
-  const TWELVE_H  = 12 * 60 * 60 * 1000;
-  if (now - lastRun < TWELVE_H) {
-    Logger.log(`Skipping — last run was ${Math.round((now - lastRun) / 3600000, 1)}h ago (< 12h)`);
+  const ONE_H = 60 * 60 * 1000;
+  if (now - lastRun < ONE_H) {
+    Logger.log(`Skipping — last run was ${Math.round((now - lastRun) / 60000)}m ago (< 1h)`);
     return;
   }
   props.setProperty("lastRun", String(now));
