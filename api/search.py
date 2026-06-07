@@ -1,5 +1,5 @@
 from http.server import BaseHTTPRequestHandler
-import json, os, urllib.request, urllib.parse, urllib.error
+import json, os, re, time, urllib.request, urllib.parse, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
@@ -35,7 +35,6 @@ def is_trusted_publisher(publisher: str) -> bool:
 
 # Patterns that indicate a non-English language is REQUIRED
 # Matches things like "Dutch required", "fluent in German", "native French speaker"
-import re
 LANGUAGE_REQUIRED_PATTERNS = re.compile(
     r'\b('
     r'dutch|nederlands|nederlandstalig|'
@@ -142,13 +141,11 @@ class handler(BaseHTTPRequestHandler):
             else:
                 queries.append(f"{title} in {location}")
 
-            import time as _time
-
             def fetch_query(query):
                 params = urllib.parse.urlencode({
                     "query":            query,
                     "page":             "1",
-                    "num_pages":        "3",
+                    "num_pages":        "1",   # 1 page = 10 results, fast (~1s per call)
                     "date_posted":      "week",
                     "employment_types": "FULLTIME",
                 })
@@ -160,22 +157,23 @@ class handler(BaseHTTPRequestHandler):
                     },
                     method="GET"
                 )
-                for attempt in range(3):          # retry up to 3× on rate-limit
+                for attempt in range(2):          # retry once on rate-limit
                     try:
-                        with urllib.request.urlopen(req, timeout=20) as resp:
+                        with urllib.request.urlopen(req, timeout=8) as resp:
                             return json.loads(resp.read()).get("data", [])
                     except urllib.error.HTTPError as e:
-                        if e.code == 429:         # rate-limited — back off and retry
-                            _time.sleep(2 ** attempt)
+                        if e.code == 429:
+                            time.sleep(1)
                             continue
                         return []
                     except Exception:
                         return []
                 return []
 
-            # Fetch all queries in parallel (8 workers to respect rate limits)
+            # All countries in parallel — with max_workers=25 all fire simultaneously
+            # Each call takes ~1s so total wall-time ~2-3s, well within 10s Vercel limit
             all_items = []
-            with ThreadPoolExecutor(max_workers=8) as pool:
+            with ThreadPoolExecutor(max_workers=25) as pool:
                 futures = [pool.submit(fetch_query, q) for q in queries]
                 for result in as_completed(futures):
                     all_items.extend(result.result())

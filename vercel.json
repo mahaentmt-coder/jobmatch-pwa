@@ -1,18 +1,22 @@
 {
   "version": 2,
   "outputDirectory": "public",
-"functions": {
+  "functions": {
     "api/match.py": {
-      "runtime": "@vercel/python@4.3.1"
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 30
     },
     "api/tailor.py": {
-      "runtime": "@vercel/python@4.3.1"
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 60
     },
     "api/search.py": {
-      "runtime": "@vercel/python@4.3.1"
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 30
     },
     "api/cv.py": {
-      "runtime": "@vercel/python@4.3.1"
+      "runtime": "@vercel/python@4.3.1",
+      "maxDuration": 60
     }
   }
 }
