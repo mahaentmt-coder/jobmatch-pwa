@@ -232,52 +232,64 @@ function extractJobsFromEmail_(text) {
 function searchJSearch_() {
   const results = [];
   const seen    = new Set();
+  let   callNum = 0;
 
   for (const query of SEARCH_QUERIES) {
+    Logger.log(`  Query: "${query}" — searching ${EMEA_LOCATIONS.length} countries`);
     for (const loc of EMEA_LOCATIONS) {
+      callNum++;
       try {
         const url  = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query + " in " + loc)}&page=1&num_pages=2&date_posted=week`;
         const resp = UrlFetchApp.fetch(url, {
-          method: "get",
+          method:             "get",
           headers: {
             "x-rapidapi-host": "jsearch.p.rapidapi.com",
             "x-rapidapi-key":  CONFIG.RAPIDAPI_KEY,
           },
           muteHttpExceptions: true,
+          deadline:           10,   // ← 10s hard timeout per call; prevents hangs
         });
-        if (resp.getResponseCode() !== 200) {
-          Logger.log(`JSearch ${resp.getResponseCode()} for: ${query} in ${loc}`);
+
+        const code = resp.getResponseCode();
+        if (code === 429) {
+          Logger.log(`  [${callNum}] Rate limited (429) — ${loc}, sleeping 5s`);
+          Utilities.sleep(5000);
+          continue;
+        }
+        if (code !== 200) {
+          Logger.log(`  [${callNum}] HTTP ${code} — ${loc}`);
           continue;
         }
 
-        for (const item of (JSON.parse(resp.getContentText()).data || [])) {
+        const items = JSON.parse(resp.getContentText()).data || [];
+        let added = 0;
+        for (const item of items) {
           if (seen.has(item.job_id)) continue;
           seen.add(item.job_id);
-
           if ((item.job_description || "").length < 200) continue;
-
           const titleLower = (item.job_title || "").toLowerCase();
           if (JUNIOR_TITLE_SIGNALS.some(s => titleLower.includes(s))) continue;
-
           if (item.job_min_salary && (item.job_salary_period || "") === "YEAR" && parseFloat(item.job_min_salary) < 60000) continue;
-
           results.push({
-            title:    item.job_title    || "",
+            title:    item.job_title     || "",
             company:  item.employer_name || "",
             location: [item.job_city, item.job_country].filter(Boolean).join(", "),
             desc:     item.job_description || "",
             url:      item.job_apply_link || item.job_google_link || "",
             salary:   extractSalary_(item.job_title, item.job_description),
           });
+          added++;
         }
-        Utilities.sleep(200);
+        if (added > 0) Logger.log(`  [${callNum}] ${loc} → +${added} jobs (total ${results.length})`);
+        Utilities.sleep(300);
+
       } catch (e) {
-        Logger.log(`searchJSearch_ error (${query} / ${loc}): ${e}`);
+        Logger.log(`  [${callNum}] ERROR ${loc}: ${e}`);
       }
     }
   }
 
-  Logger.log(`JSearch sweep complete: ${results.length} quality jobs`);
+  Logger.log(`JSearch sweep complete: ${results.length} quality jobs from ${callNum} calls`);
   return results;
 }
 
@@ -289,7 +301,7 @@ function fetchDescription_(title, company) {
     const q    = `${title} ${company}`.replace(/[^\w\s]/g, "").substring(0, 100);
     const resp = UrlFetchApp.fetch(
       `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(q)}&page=1&num_pages=2`,
-      { method: "get", headers: { "x-rapidapi-host": "jsearch.p.rapidapi.com", "x-rapidapi-key": CONFIG.RAPIDAPI_KEY }, muteHttpExceptions: true }
+      { method: "get", headers: { "x-rapidapi-host": "jsearch.p.rapidapi.com", "x-rapidapi-key": CONFIG.RAPIDAPI_KEY }, muteHttpExceptions: true, deadline: 10 }
     );
     if (resp.getResponseCode() !== 200) return null;
     const jobs = JSON.parse(resp.getContentText()).data || [];
