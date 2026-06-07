@@ -281,18 +281,91 @@
 
   /* ── Job search result cards ── */
   .job-card {
-    background: var(--card);
+    background: linear-gradient(145deg, #141d2e, #111827);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 14px;
+    padding: 16px;
     margin-bottom: 10px;
     cursor: pointer;
-    transition: border-color 0.2s;
+    transition: border-color 0.25s, box-shadow 0.25s, transform 0.15s;
+    position: relative;
+    overflow: hidden;
   }
-  .job-card.selected { border-color: var(--primary); }
-  .job-card-title { font-size: 14px; font-weight: 700; }
-  .job-card-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
-  .job-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .job-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    background: radial-gradient(circle at 20% 50%, rgba(59,130,246,0.07), transparent 60%);
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .job-card:hover { border-color: rgba(59,130,246,0.5); box-shadow: 0 4px 24px rgba(0,0,0,0.4); transform: translateY(-1px); }
+  .job-card:hover::before { opacity: 1; }
+  .job-card.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  .job-card.score-high { border-color: rgba(16,185,129,0.4); box-shadow: 0 0 16px rgba(16,185,129,0.1); }
+  .job-card.score-mid  { border-color: rgba(245,158,11,0.35); }
+  .job-card.score-low  { border-color: rgba(239,68,68,0.25); }
+
+  .job-rank {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    padding: 2px 5px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+  .job-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.3;
+  }
+  .job-card-title.title-hot {
+    background: linear-gradient(135deg, #60a5fa, #34d399);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .job-card-title.title-warm {
+    background: linear-gradient(135deg, #fbbf24, #f97316);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .job-card-sub { font-size: 11px; color: var(--muted); margin-top: 4px; letter-spacing: 0.2px; }
+  .job-card-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+  /* Score badge ring */
+  .score-badge-ring {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    position: relative;
+    background: rgba(0,0,0,0.3);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .score-badge-ring.ring-high {
+    border-color: var(--success);
+    box-shadow: 0 0 12px rgba(16,185,129,0.4);
+  }
+  .score-badge-ring.ring-mid {
+    border-color: var(--gold);
+    box-shadow: 0 0 10px rgba(245,158,11,0.3);
+  }
+  .score-badge-ring.ring-low {
+    border-color: var(--danger);
+  }
 
   /* ── Tracker ── */
   .track-card {
@@ -906,41 +979,83 @@ function renderSearchResults() {
   const container = document.getElementById('searchResults');
   if (!searchedJobs.length) { container.innerHTML = ''; return; }
 
+  const totalJobs = searchedJobs.length;
+  const scored    = searchedJobs.filter(j => j._score !== undefined).length;
+  const topScore  = scored ? Math.max(...searchedJobs.map(j => j._score || 0)) : 0;
+
   const scoreAllBtn = resume
-    ? `<button id="scoreAllBtn" class="btn btn-primary" style="margin:10px 0 4px" onclick="scoreAllJobs()">🎯 Score All Against My Resume</button>`
+    ? `<button id="scoreAllBtn" class="btn btn-primary" style="margin:10px 0 4px;background:linear-gradient(135deg,#3b82f6,#8b5cf6)" onclick="scoreAllJobs()">🎯 Score & Sort All Jobs</button>`
     : '';
 
+  const summaryBar = scored
+    ? `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px">
+        <span style="font-size:11px;color:var(--muted)">🏆 <b style="color:var(--success)">${topScore}</b> top score · <b style="color:var(--text)">${scored}/${totalJobs}</b> scored</span>
+        <span style="flex:1"></span>
+        <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">↓ sorted by match</span>
+      </div>` : '';
+
   const cardsHtml = searchedJobs.map((j, i) => {
-    const meta = [j.company || 'Unknown', j.location || 'Location TBC', j.posted || ''].filter(Boolean).join(' · ');
+    const meta = [j.company || 'Unknown', j.location || 'Location TBC', j.posted ? `📅 ${j.posted}` : ''].filter(Boolean).join(' · ');
+
+    // Title color class based on score
+    const sc = j._score;
+    const titleClass = sc >= 75 ? 'title-hot' : sc >= 55 ? 'title-warm' : '';
+    const cardClass  = sc >= 75 ? 'score-high' : sc >= 55 ? 'score-mid' : sc !== undefined ? 'score-low' : '';
+
     const pills = [
-      j.seniority     ? `<span class="tag" style="background:rgba(99,102,241,0.15);color:#818cf8">${j.seniority}</span>` : '',
-      j.salary        ? `<span class="tag" style="background:rgba(16,185,129,0.15);color:var(--success)">💰 ${j.salary}</span>` : '',
-      j.contract_type ? `<span class="tag" style="background:rgba(245,158,11,0.15);color:var(--gold)">${j.contract_type}</span>` : '',
-      j.remote        ? `<span class="tag" style="background:rgba(6,182,212,0.15);color:var(--accent)">🌐 Remote</span>` : '',
-      j.publisher     ? `<span class="tag" style="background:rgba(255,255,255,0.05);color:var(--muted)">via ${j.publisher}</span>` : '',
+      j.seniority     ? `<span class="tag" style="background:rgba(99,102,241,0.15);color:#a5b4fc">${j.seniority}</span>` : '',
+      j.salary        ? `<span class="tag" style="background:rgba(16,185,129,0.12);color:#6ee7b7">💰 ${j.salary}</span>` : '',
+      j.contract_type ? `<span class="tag" style="background:rgba(245,158,11,0.12);color:#fcd34d">${j.contract_type}</span>` : '',
+      j.remote        ? `<span class="tag" style="background:rgba(6,182,212,0.12);color:#67e8f9">🌐 Remote</span>` : '',
+      j.publisher     ? `<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--muted);font-size:10px">via ${j.publisher}</span>` : '',
     ].filter(Boolean).join('');
+
+    // Score badge
+    let badgeHtml = `<div id="score-badge-${i}" class="score-badge-ring"></div>`;
+
+    // Rank label (only after scoring)
+    const rankLabel = (sc !== undefined && i < 10)
+      ? `<div class="job-rank">#${i + 1}</div>` : '';
+
     return `
-    <div class="job-card" id="sjob-${i}" style="margin-top:10px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="flex:1">
-          <div class="job-card-title">${j.title}</div>
+    <div class="job-card ${cardClass}" id="sjob-${i}">
+      ${rankLabel}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;${rankLabel ? 'padding-top:6px' : ''}">
+        <div style="flex:1;min-width:0">
+          <div class="job-card-title ${titleClass}">${j.title}</div>
           <div class="job-card-sub">${meta}</div>
           ${pills ? `<div class="tags" style="margin-top:6px">${pills}</div>` : ''}
         </div>
-        <div id="score-badge-${i}"></div>
+        ${badgeHtml}
       </div>
       <div id="tailor-result-${i}"></div>
-      <div class="job-card-actions" style="margin-top:10px;flex-wrap:wrap">
+      <div class="job-card-actions">
         <button class="btn btn-secondary btn-sm" onclick="scoreJob(${i})">🎯 Score</button>
         <button class="btn btn-gold btn-sm" onclick="tailorJob(${i})">✨ Tailor</button>
-        <button class="btn btn-primary btn-sm" onclick="importLinkedInJob(${i})">➕ Import</button>
-        ${j.url ? `<a href="${j.url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">🔗 View</button></a>` : ''}
+        <button class="btn btn-primary btn-sm" onclick="importLinkedInJob(${i})">➕ Save</button>
+        ${j.url ? `<a href="${j.url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">🔗 Apply</button></a>` : ''}
       </div>
     </div>`;
   }).join('');
 
-  container.innerHTML = scoreAllBtn +
+  container.innerHTML = scoreAllBtn + summaryBar +
     `<div id="searchResultsGrid">${cardsHtml}</div>`;
+
+  // Restore score badges if jobs are already scored (after re-render)
+  searchedJobs.forEach((j, i) => {
+    if (j._score !== undefined) _paintBadge(i, j._score, j._rec);
+  });
+}
+
+function _paintBadge(i, score, rec) {
+  const badge = document.getElementById(`score-badge-${i}`);
+  if (!badge) return;
+  const color   = score >= 75 ? 'var(--success)' : score >= 55 ? 'var(--gold)' : 'var(--danger)';
+  const ringCls = score >= 75 ? 'ring-high' : score >= 55 ? 'ring-mid' : 'ring-low';
+  badge.className = `score-badge-ring ${ringCls}`;
+  badge.innerHTML = `
+    <div style="font-family:var(--mono);font-size:17px;font-weight:600;color:${color};line-height:1">${score}</div>
+    <div style="font-size:8px;color:var(--muted);margin-top:2px;text-align:center;line-height:1.2">${(rec||'').split(' ')[0]}</div>`;
 }
 
 async function scoreJob(i) {
@@ -954,7 +1069,8 @@ async function scoreJob(i) {
     return;
   }
 
-  badge.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px"></span>`;
+  badge.className = 'score-badge-ring';
+  badge.innerHTML = `<span class="spinner" style="width:18px;height:18px;border-width:2px"></span>`;
 
   try {
     const res = await fetch('/api/match', {
@@ -965,14 +1081,23 @@ async function scoreJob(i) {
     const d = await res.json();
     if (d.error) throw new Error(d.error);
     const score = d.match_score || 0;
-    const color = score >= 75 ? 'var(--success)' : score >= 55 ? 'var(--gold)' : 'var(--danger)';
     const rec   = d.recommendation || '';
-    badge.innerHTML = `
-      <div style="text-align:center">
-        <div style="font-family:var(--mono);font-size:20px;font-weight:600;color:${color}">${score}</div>
-        <div style="font-size:9px;color:var(--muted);margin-top:2px">${rec.split(' ')[0]}</div>
-      </div>`;
     searchedJobs[i]._score = score;
+    searchedJobs[i]._rec   = rec;
+    _paintBadge(i, score, rec);
+
+    // Update card border class
+    const card = document.getElementById(`sjob-${i}`);
+    if (card) {
+      card.classList.remove('score-high','score-mid','score-low');
+      card.classList.add(score >= 75 ? 'score-high' : score >= 55 ? 'score-mid' : 'score-low');
+      const titleEl = card.querySelector('.job-card-title');
+      if (titleEl) {
+        titleEl.classList.remove('title-hot','title-warm');
+        if (score >= 75) titleEl.classList.add('title-hot');
+        else if (score >= 55) titleEl.classList.add('title-warm');
+      }
+    }
 
     // Show Generate CV button for high-scoring jobs
     if (score >= 80) {
@@ -1001,8 +1126,29 @@ async function scoreAllJobs() {
   const btn = document.getElementById('scoreAllBtn');
   if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Scoring...`; }
   await Promise.all(searchedJobs.map((_, i) => scoreJob(i)));
-  if (btn) { btn.disabled = false; btn.innerHTML = '🎯 Score All Against My Resume'; }
-  toast('✅ All jobs scored!');
+
+  // Sort by score descending and re-render (renderSearchResults restores all badges)
+  searchedJobs.sort((a, b) => (b._score || 0) - (a._score || 0));
+  renderSearchResults();
+
+  // Add "Generate CV" buttons for 80+ jobs
+  searchedJobs.forEach((j, i) => {
+    if ((j._score || 0) >= 80) {
+      const card = document.getElementById(`sjob-${i}`);
+      if (card && !card.querySelector('.gen-cv-btn')) {
+        const actions = card.querySelector('.job-card-actions');
+        const b = document.createElement('button');
+        b.className = 'btn btn-success btn-sm gen-cv-btn';
+        b.innerHTML = '📄 CV';
+        b.onclick = () => generateCV(i);
+        actions.prepend(b);
+      }
+    }
+  });
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '🎯 Score & Sort All Jobs'; }
+  const top = searchedJobs[0];
+  toast(`✅ Sorted! #1: ${top?.title?.split(' ').slice(0,3).join(' ')} — ${top?._score || 0}pts`);
 }
 
 async function tailorJob(i) {
