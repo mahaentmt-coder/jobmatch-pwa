@@ -188,10 +188,6 @@ class handler(BaseHTTPRequestHandler):
                 if not is_trusted_publisher(item.get("job_publisher", "")):
                     continue
 
-                # Skip jobs that require a non-English language
-                if requires_non_english(item.get("job_description", "")):
-                    continue
-
                 title_str   = item.get("job_title", "")
                 title_lower = title_str.lower()
 
@@ -206,6 +202,20 @@ class handler(BaseHTTPRequestHandler):
                     seniority = "Junior"
                 else:
                     seniority = "Mid"
+
+                # Skip junior/entry-level roles — not relevant for Director+ search
+                if seniority == "Junior":
+                    continue
+
+                # Skip clearly junior salaries (annual < 60k in GBP/EUR/USD)
+                sal_min_check = item.get("job_min_salary")
+                sal_period    = item.get("job_salary_period", "").upper()
+                if sal_min_check and sal_period == "YEAR" and float(sal_min_check) < 60000:
+                    continue
+
+                # Skip jobs that require a non-English language
+                if requires_non_english(item.get("job_description", "")):
+                    continue
 
                 # Salary
                 sal_min  = item.get("job_min_salary")
