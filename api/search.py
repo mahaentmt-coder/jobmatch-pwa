@@ -215,7 +215,7 @@ class handler(BaseHTTPRequestHandler):
 
                 # Skip clearly junior salaries (annual < 60k in GBP/EUR/USD)
                 sal_min_check = item.get("job_min_salary")
-                sal_period    = item.get("job_salary_period", "").upper()
+                sal_period    = (item.get("job_salary_period") or "").upper()
                 if sal_min_check and sal_period == "YEAR" and float(sal_min_check) < 60000:
                     skip_sal += 1; continue
 
@@ -226,8 +226,8 @@ class handler(BaseHTTPRequestHandler):
                 # Salary
                 sal_min  = item.get("job_min_salary")
                 sal_max  = item.get("job_max_salary")
-                period   = item.get("job_salary_period", "")
-                currency = item.get("job_salary_currency", "")
+                period   = item.get("job_salary_period") or ""
+                currency = item.get("job_salary_currency") or ""
                 if sal_min and sal_max:
                     structured = f"{currency} {int(sal_min):,} – {int(sal_max):,}".strip()
                     if period:
