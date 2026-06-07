@@ -112,13 +112,17 @@ function checkNewJobAlerts() {
   const rawJSearch = searchJSearch_();
   const jsearchJobs = rawJSearch
     .filter(item => item.job_description?.length > 200)
-    .map(item => ({
-      title:   item.job_title,
-      company: item.employer_name,
-      location:`${item.job_city || ""}, ${item.job_country || ""}`.replace(/^, |, $/, ""),
-      desc:    item.job_description,
-      url:     item.job_apply_link || item.job_google_link || "",
-    }));
+    .map(item => {
+      const salary = extractSalary_(item.job_title, item.job_description);
+      return {
+        title:   item.job_title,
+        company: item.employer_name,
+        location:`${item.job_city || ""}, ${item.job_country || ""}`.replace(/^, |, $/, ""),
+        desc:    item.job_description,
+        url:     item.job_apply_link || item.job_google_link || "",
+        salary,
+      };
+    });
   Logger.log(`Jobs from JSearch sweep: ${jsearchJobs.length}`);
 
   // 3. Merge: email jobs first, then JSearch jobs not already covered
@@ -270,6 +274,33 @@ function fetchDescription_(title, company, location) {
   }
 }
 
+// ── SALARY EXTRACTOR ─────────────────────────────────────────────────────────
+function extractSalary_(title, description) {
+  // Check title first (e.g. "Programme Director | €170k"), then description
+  const sources = [title || "", (description || "").substring(0, 2000)];
+  const pattern = /(£|€|\$|USD|EUR|GBP)?\s*(\d[\d,\.]+)\s*[kK]?\s*(?:[-–to]+\s*(£|€|\$)?\s*(\d[\d,\.]+)\s*[kK]?)?/gi;
+
+  for (const src of sources) {
+    let m;
+    pattern.lastIndex = 0;
+    while ((m = pattern.exec(src)) !== null) {
+      const raw    = m[0].trim();
+      const valStr = m[2].replace(/[,\.]/g, "");
+      const val    = parseFloat(valStr);
+      if (isNaN(val)) continue;
+
+      const hasK        = /k/i.test(raw);
+      const normalised  = hasK && val < 1000 ? val * 1000 : val;
+      const hasCurrency = m[1];
+
+      if ((hasCurrency || normalised >= 30000) && normalised >= 20000 && normalised <= 1000000) {
+        return raw.trim();
+      }
+    }
+  }
+  return "";
+}
+
 // ── SCORE JOB VIA JOBMATCH API ────────────────────────────────────────────────
 function scoreJob_(title, company, description) {
   try {
@@ -346,6 +377,7 @@ function sendReport_(jobs, subject) {
             </tr>
           </table>
           <div style="margin-top:8px;font-size:12px;color:#94a3b8">${verdict}</div>
+          ${j.salary ? `<div style="margin-top:6px"><span style="background:rgba(16,185,129,0.12);color:#6ee7b7;font-size:12px;font-weight:600;padding:3px 10px;border-radius:6px">💰 ${j.salary}</span></div>` : ""}
           ${strHtml ? `<div style="margin-top:8px">${strHtml}</div>` : ""}
           ${gapHtml ? `<div style="margin-top:6px;font-size:11px;color:#64748b">Gaps: ${gapHtml}</div>` : ""}
         </div>

@@ -53,6 +53,39 @@ LANGUAGE_OPTIONAL_PATTERNS = re.compile(
     re.IGNORECASE
 )
 
+def extract_salary(title: str, description: str, structured_salary: str) -> str:
+    """Extract salary from structured fields first, then title, then description text."""
+    if structured_salary:
+        return structured_salary
+
+    # Check title first (e.g. "Programme Director | €170k")
+    for text in [title, description[:2000]]:
+        if not text:
+            continue
+        # Patterns: £120k-£150k  €150,000–€200,000  $200k  £80,000 - £100,000  150k-180k
+        m = re.search(
+            r'(£|€|\$|USD|EUR|GBP)?\s*(\d[\d,\.]+)\s*[kK]?\s*(?:[-–to]+\s*(£|€|\$)?\s*(\d[\d,\.]+)\s*[kK]?)?'
+            r'(?:\s*(?:per\s+year|pa|p\.a\.|/\s*year|annually|annual|salary))?',
+            text, re.IGNORECASE
+        )
+        if m:
+            raw = m.group(0).strip()
+            # Filter out noise: must contain currency symbol or be >= 30k
+            val_str = m.group(2).replace(',', '').replace('.', '')
+            try:
+                val = float(val_str)
+                if m.group(1) or val >= 30000 or (val >= 30 and 'k' in raw.lower()):
+                    # Normalise "k" values
+                    if val < 1000 and 'k' in raw.lower():
+                        val = int(val * 1000)
+                    # Only return if looks like a salary (20k-500k range)
+                    if 20000 <= val <= 1000000:
+                        return raw.strip()
+            except ValueError:
+                pass
+    return ""
+
+
 def requires_non_english(description: str) -> bool:
     """Return True if the job description requires a non-English language."""
     if not description:
@@ -164,17 +197,21 @@ class handler(BaseHTTPRequestHandler):
                     seniority = "Mid"
 
                 # Salary
-                sal_min = item.get("job_min_salary")
-                sal_max = item.get("job_max_salary")
-                period  = item.get("job_salary_period", "")
+                sal_min  = item.get("job_min_salary")
+                sal_max  = item.get("job_max_salary")
+                period   = item.get("job_salary_period", "")
+                currency = item.get("job_salary_currency", "")
                 if sal_min and sal_max:
-                    salary = f"{int(sal_min):,} – {int(sal_max):,}"
+                    structured = f"{currency} {int(sal_min):,} – {int(sal_max):,}".strip()
                     if period:
-                        salary += f" / {period.lower()}"
+                        structured += f" / {period.lower()}"
                 elif sal_min:
-                    salary = f"{int(sal_min):,}+" + (f" / {period.lower()}" if period else "")
+                    structured = f"{currency} {int(sal_min):,}+".strip()
+                    if period:
+                        structured += f" / {period.lower()}"
                 else:
-                    salary = ""
+                    structured = ""
+                salary = extract_salary(title_str, item.get("job_description", ""), structured)
 
                 city    = item.get("job_city", "") or ""
                 country = item.get("job_country", "") or ""
