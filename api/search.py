@@ -3,8 +3,55 @@ import json, os, urllib.request, urllib.parse, urllib.error
 
 ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
 
-# EMEA countries to search across when location is EMEA
-EMEA_COUNTRIES = ["gb", "de", "fr", "nl", "ae", "za", "sg"]
+# Maps location keywords → (country_code, city_filter)
+# country_code = Adzuna endpoint; city_filter = `where` param (empty = whole country)
+LOCATION_MAP = [
+    # Countries — use endpoint only, no city filter
+    (["uk", "united kingdom", "britain", "england", "scotland", "wales"], "gb", ""),
+    (["netherlands", "holland"],                                           "nl", ""),
+    (["germany", "deutschland"],                                           "de", ""),
+    (["france"],                                                           "fr", ""),
+    (["uae", "united arab emirates"],                                      "ae", ""),
+    (["south africa"],                                                     "za", ""),
+    (["singapore"],                                                        "sg", ""),
+    (["australia"],                                                        "au", ""),
+    (["canada"],                                                           "ca", ""),
+    (["usa", "united states", "america"],                                  "us", ""),
+    (["india"],                                                            "in", ""),
+    # Cities — use nearest country endpoint + city filter
+    (["london"],                                                           "gb", "London"),
+    (["manchester"],                                                       "gb", "Manchester"),
+    (["amsterdam"],                                                        "nl", "Amsterdam"),
+    (["berlin"],                                                           "de", "Berlin"),
+    (["munich", "münchen"],                                                "de", "Munich"),
+    (["paris"],                                                            "fr", "Paris"),
+    (["dubai"],                                                            "ae", "Dubai"),
+    (["sydney"],                                                           "au", "Sydney"),
+    (["toronto"],                                                          "ca", "Toronto"),
+    (["new york", "nyc"],                                                  "us", "New York"),
+]
+
+EMEA_COUNTRIES = ["gb", "de", "fr", "nl", "ae", "za"]
+
+
+def resolve_location(location: str):
+    """Returns list of (country_code, city_filter) tuples to search."""
+    if not location:
+        return [(c, "") for c in EMEA_COUNTRIES]
+
+    loc = location.lower().strip()
+
+    # EMEA / global → search all EMEA countries
+    if any(k in loc for k in ["emea", "worldwide", "global", "remote", "anywhere"]):
+        return [(c, "") for c in EMEA_COUNTRIES]
+
+    # Try to match known locations
+    for keywords, country, city in LOCATION_MAP:
+        if any(k in loc for k in keywords):
+            return [(country, city)]
+
+    # Unknown location — search EMEA but pass location as city hint in gb
+    return [(c, "") for c in EMEA_COUNTRIES]
 
 
 class handler(BaseHTTPRequestHandler):
@@ -31,64 +78,49 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "ADZUNA_APP_ID and ADZUNA_APP_KEY environment variables not set"}, 500)
                 return
 
-            loc_lower = location.lower()
-            if not location or "emea" in loc_lower or "worldwide" in loc_lower or "global" in loc_lower:
-                countries = EMEA_COUNTRIES
-            elif "uk" in loc_lower or "united kingdom" in loc_lower or "britain" in loc_lower:
-                countries = ["gb"]
-            elif "uae" in loc_lower or "dubai" in loc_lower or "emirates" in loc_lower:
-                countries = ["ae"]
-            elif "germany" in loc_lower or "deutschland" in loc_lower:
-                countries = ["de"]
-            elif "france" in loc_lower or "paris" in loc_lower:
-                countries = ["fr"]
-            elif "netherlands" in loc_lower or "amsterdam" in loc_lower:
-                countries = ["nl"]
-            else:
-                countries = EMEA_COUNTRIES
-
             # Parse OR queries: "Digital Transformation Director or Executive"
             # → what_phrase="Digital Transformation", what_or="Director Executive"
             what_phrase = title
             what_or     = ""
             if " or " in title.lower():
-                idx   = title.lower().index(" or ")
-                left  = title[:idx].strip()   # "Digital Transformation Director"
-                right = title[idx+4:].strip() # "Executive"
+                idx         = title.lower().index(" or ")
+                left        = title[:idx].strip()
+                right       = title[idx+4:].strip()
                 left_words  = left.split()
                 right_words = right.split()
-                # Right side is the alternate suffix; left prefix minus right len is the shared phrase
                 suffix_len  = len(right_words)
                 base_words  = left_words[:-suffix_len] if suffix_len < len(left_words) else left_words[:-1]
                 or_terms    = left_words[len(base_words):] + right_words
                 what_phrase = " ".join(base_words)
                 what_or     = " ".join(or_terms)
 
-            jobs = []
-            seen = set()
+            targets = resolve_location(location)
+            jobs    = []
+            seen    = set()
 
-            for country in countries:
+            for country, city in targets:
                 if len(jobs) >= limit:
                     break
 
-                params = urllib.parse.urlencode({
+                p = {
                     "app_id":           app_id,
                     "app_key":          app_key,
                     "results_per_page": min(limit, 10),
                     "what_phrase":      what_phrase,
-                    "what_or":          what_or,
-                    "where":            location if location and "emea" not in loc_lower else "",
-                    "content-type":     "application/json",
-                })
-                url = f"{ADZUNA_BASE}/{country}/search/1?{params}"
+                }
+                if what_or:
+                    p["what_or"] = what_or
+                if city:
+                    p["where"] = city
 
+                url = f"{ADZUNA_BASE}/{country}/search/1?{urllib.parse.urlencode(p)}"
                 req = urllib.request.Request(url, method="GET")
 
                 try:
                     with urllib.request.urlopen(req, timeout=10) as resp:
                         data = json.loads(resp.read())
-                except urllib.error.HTTPError as e:
-                    continue  # skip countries that error
+                except urllib.error.HTTPError:
+                    continue
 
                 for item in data.get("results", []):
                     job_id = str(item.get("id", ""))
@@ -96,10 +128,9 @@ class handler(BaseHTTPRequestHandler):
                         continue
                     seen.add(job_id)
 
-                    title_str = item.get("title", "")
+                    title_str   = item.get("title", "")
                     title_lower = title_str.lower()
 
-                    # Infer seniority from title
                     if any(w in title_lower for w in ["chief", "cto", "cio", "cdo", "vp ", "vice president"]):
                         seniority = "Executive"
                     elif any(w in title_lower for w in ["director", "head of", "principal"]):
@@ -111,18 +142,17 @@ class handler(BaseHTTPRequestHandler):
                     else:
                         seniority = "Mid"
 
-                    # Salary
                     sal_min = item.get("salary_min")
                     sal_max = item.get("salary_max")
+                    # Format salary with local currency symbol
+                    symbols = {"gb": "£", "de": "€", "fr": "€", "nl": "€", "ae": "AED ", "za": "R", "us": "$", "au": "A$", "ca": "C$"}
+                    sym = symbols.get(country, "")
                     if sal_min and sal_max:
-                        salary = f"£{int(sal_min):,} – £{int(sal_max):,}"
+                        salary = f"{sym}{int(sal_min):,} – {sym}{int(sal_max):,}"
                     elif sal_min:
-                        salary = f"£{int(sal_min):,}+"
+                        salary = f"{sym}{int(sal_min):,}+"
                     else:
                         salary = ""
-
-                    contract = item.get("contract_type", "")
-                    contract_time = item.get("contract_time", "")
 
                     jobs.append({
                         "id":            job_id,
@@ -134,8 +164,8 @@ class handler(BaseHTTPRequestHandler):
                         "posted":        item.get("created", "")[:10] if item.get("created") else "",
                         "salary":        salary,
                         "seniority":     seniority,
-                        "contract_type": contract,
-                        "contract_time": contract_time,
+                        "contract_type": item.get("contract_type", ""),
+                        "contract_time": item.get("contract_time", ""),
                     })
 
                     if len(jobs) >= limit:
