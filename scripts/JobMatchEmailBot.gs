@@ -91,53 +91,66 @@ function checkNewJobAlerts() {
 
   Logger.log(`Found ${threads.length} unprocessed alert email(s).`);
 
+  // 1. Extract jobs from all unprocessed emails
+  const emailJobs = [];
+  const emailSeen = new Set();
   for (const thread of threads) {
     try {
-      processThread_(thread);
-    } catch (e) {
-      Logger.log(`Error processing thread: ${e}`);
-    }
-    // Mark as processed regardless
+      const msg  = thread.getMessages()[0];
+      const body = msg.getPlainBody() || msg.getBody();
+      const jobs = extractJobsFromEmail_(body);
+      for (const j of jobs) {
+        const key = j.title.toLowerCase();
+        if (!emailSeen.has(key)) { emailSeen.add(key); emailJobs.push(j); }
+      }
+    } catch(e) { Logger.log(`Email parse error: ${e}`); }
     labelThread_(thread);
   }
-}
+  Logger.log(`Jobs from emails: ${emailJobs.length}`);
 
-// ── PROCESS ONE EMAIL THREAD ──────────────────────────────────────────────────
-function processThread_(thread) {
-  const msg  = thread.getMessages()[0];
-  const body = msg.getPlainBody() || msg.getBody();
+  // 2. Proactive JSearch sweep matching LinkedIn alert criteria
+  const rawJSearch = searchJSearch_();
+  const jsearchJobs = rawJSearch
+    .filter(item => item.job_description?.length > 200)
+    .map(item => ({
+      title:   item.job_title,
+      company: item.employer_name,
+      location:`${item.job_city || ""}, ${item.job_country || ""}`.replace(/^, |, $/, ""),
+      desc:    item.job_description,
+      url:     item.job_apply_link || item.job_google_link || "",
+    }));
+  Logger.log(`Jobs from JSearch sweep: ${jsearchJobs.length}`);
 
-  Logger.log(`Processing: ${msg.getSubject()}`);
-
-  // Extract jobs from email body
-  const jobs = extractJobsFromEmail_(body);
-  if (!jobs.length) {
-    Logger.log("No jobs extracted from email.");
-    return;
-  }
-
-  Logger.log(`Extracted ${jobs.length} jobs. Fetching descriptions...`);
-
-  // Fetch descriptions + score each job
-  const scored = [];
-  for (const job of jobs) {
-    const desc = fetchDescription_(job.title, job.company, job.location);
-    if (!desc) {
-      scored.push({ ...job, score: null, rec: "Description not found", gaps: [], strengths: [] });
-      continue;
+  // 3. Merge: email jobs first, then JSearch jobs not already covered
+  const allTitles = new Set(emailJobs.map(j => j.title.toLowerCase()));
+  const merged    = [...emailJobs];
+  for (const j of jsearchJobs) {
+    if (!allTitles.has(j.title.toLowerCase())) {
+      allTitles.add(j.title.toLowerCase());
+      merged.push(j);
     }
-    const result = scoreJob_(job.title, job.company, desc);
-    scored.push({ ...job, score: result.score, rec: result.rec, gaps: result.gaps, strengths: result.strengths, desc });
-    Utilities.sleep(600); // avoid rate limiting
+  }
+  Logger.log(`Total unique jobs to score: ${merged.length}`);
+
+  if (!merged.length) { Logger.log("Nothing to score."); return; }
+
+  // 4. Score all jobs
+  const scored = [];
+  for (const j of merged) {
+    const desc   = j.desc || fetchDescription_(j.title, j.company, j.location);
+    const result = desc
+      ? scoreJob_(j.title, j.company, desc)
+      : { score: null, rec: "Description not found", gaps: [], strengths: [] };
+    scored.push({ ...j, ...result });
+    Logger.log(`  [${result.score ?? "N/A"}] ${j.title} @ ${j.company}`);
+    Utilities.sleep(500);
   }
 
-  // Sort by score descending
+  // 5. Sort and send report
   scored.sort((a, b) => (b.score || 0) - (a.score || 0));
-
-  // Send report email
-  const subject = msg.getSubject().replace("has been created", "— Scored");
+  const subject = `LinkedIn Alert — Digital Transformation Director/Executive in EMEA`;
   sendReport_(scored, subject);
-  Logger.log(`Report sent for ${scored.length} jobs.`);
+  Logger.log(`Report sent — ${scored.length} jobs.`);
 }
 
 // ── EXTRACT JOBS FROM EMAIL PLAIN TEXT ───────────────────────────────────────
@@ -178,6 +191,48 @@ function extractJobsFromEmail_(text) {
     seen.add(key);
     return true;
   });
+}
+
+// ── JSEARCH: PROACTIVE EMEA SEARCH ───────────────────────────────────────────
+// Mirrors the LinkedIn alert: "director or executive digital transformation"
+// past week, EMEA locations. Returns array of raw job objects.
+const EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands", "Switzerland", "Ireland", "Belgium"];
+const SEARCH_QUERIES = [
+  "Digital Transformation Director or Executive",
+  "Programme Director Digital Transformation",
+  "AI Digital Transformation Director",
+  "IT Program Director or Executive",
+  "Strategy Director Digital",
+];
+
+function searchJSearch_() {
+  const allJobs = [];
+  const seen    = new Set();
+
+  for (const query of SEARCH_QUERIES) {
+    for (const loc of EMEA_LOCATIONS) {
+      try {
+        const q   = `${query} in ${loc}`;
+        const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(q)}&page=1&num_pages=2&date_posted=week&employment_types=FULLTIME`;
+        const resp = UrlFetchApp.fetch(url, {
+          method:  "get",
+          headers: { "x-rapidapi-host": "jsearch.p.rapidapi.com", "x-rapidapi-key": CONFIG.RAPIDAPI_KEY },
+          muteHttpExceptions: true,
+        });
+        if (resp.getResponseCode() !== 200) continue;
+        const data = JSON.parse(resp.getContentText()).data || [];
+        for (const item of data) {
+          if (seen.has(item.job_id)) continue;
+          seen.add(item.job_id);
+          allJobs.push(item);
+        }
+        Utilities.sleep(250);
+      } catch(e) { Logger.log(`searchJSearch_ error (${query} / ${loc}): ${e}`); }
+    }
+  }
+
+  Logger.log(`JSearch proactive search: ${allJobs.length} raw results`);
+  return allJobs;
 }
 
 // ── FETCH FULL JOB DESCRIPTION VIA JSEARCH ───────────────────────────────────
