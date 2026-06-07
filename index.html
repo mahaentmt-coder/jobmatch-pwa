@@ -916,6 +916,8 @@ function saveJobs() { localStorage.setItem('jm_jobs', JSON.stringify(jobs)); }
 
 // ── LinkedIn Search ────────────────────────────────────────────────────────
 let searchedJobs = []; // holds current search results
+let currentPage  = 0;
+const PAGE_SIZE  = 20;
 
 function togglePreset(el, query) {
   el.classList.toggle('active-preset');
@@ -963,6 +965,7 @@ async function searchLinkedIn() {
     }
 
     searchedJobs = allJobs;
+    currentPage  = 0;
     renderSearchResults();
     toast(`✅ Found ${allJobs.length} unique jobs (last 7 days) — scoring...`);
 
@@ -979,29 +982,42 @@ function renderSearchResults() {
   const container = document.getElementById('searchResults');
   if (!searchedJobs.length) { container.innerHTML = ''; return; }
 
-  const totalJobs = searchedJobs.length;
-  const scored    = searchedJobs.filter(j => j._score !== undefined).length;
-  const topScore  = scored ? Math.max(...searchedJobs.map(j => j._score || 0)) : 0;
+  const totalJobs  = searchedJobs.length;
+  const totalPages = Math.ceil(totalJobs / PAGE_SIZE);
+  currentPage      = Math.max(0, Math.min(currentPage, totalPages - 1));
+  const start      = currentPage * PAGE_SIZE;
+  const end        = Math.min(start + PAGE_SIZE, totalJobs);
+  const pageJobs   = searchedJobs.slice(start, end);
 
+  const scored   = searchedJobs.filter(j => j._score !== undefined).length;
+  const topScore = scored ? Math.max(...searchedJobs.map(j => j._score || 0)) : 0;
+
+  // ── Score all button
   const scoreAllBtn = resume
     ? `<button id="scoreAllBtn" class="btn btn-primary" style="margin:10px 0 4px;background:linear-gradient(135deg,#3b82f6,#8b5cf6)" onclick="scoreAllJobs()">🎯 Score & Sort All Jobs</button>`
     : '';
 
-  const summaryBar = scored
-    ? `<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px">
-        <span style="font-size:11px;color:var(--muted)">🏆 <b style="color:var(--success)">${topScore}</b> top score · <b style="color:var(--text)">${scored}/${totalJobs}</b> scored</span>
-        <span style="flex:1"></span>
-        <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">↓ sorted by match</span>
-      </div>` : '';
+  // ── Summary bar
+  const summaryBar = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--muted)">
+        📋 <b style="color:var(--text)">${totalJobs}</b> jobs
+        ${scored ? `· 🏆 <b style="color:var(--success)">${topScore}</b> top · <b style="color:var(--text)">${scored}</b> scored` : ''}
+      </span>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--muted);font-family:var(--mono)">
+        Showing ${start + 1}–${end} of ${totalJobs}
+      </span>
+    </div>`;
 
-  const cardsHtml = searchedJobs.map((j, i) => {
+  // ── Job cards for this page
+  const cardsHtml = pageJobs.map((j, pi) => {
+    const i    = start + pi; // global index
     const meta = [j.company || 'Unknown', j.location || 'Location TBC', j.posted ? `📅 ${j.posted}` : ''].filter(Boolean).join(' · ');
-
-    // Title color class based on score
-    const sc = j._score;
+    const sc   = j._score;
     const titleClass = sc >= 75 ? 'title-hot' : sc >= 55 ? 'title-warm' : '';
     const cardClass  = sc >= 75 ? 'score-high' : sc >= 55 ? 'score-mid' : sc !== undefined ? 'score-low' : '';
-
+    const rankLabel  = (sc !== undefined && i < 10) ? `<div class="job-rank">#${i + 1}</div>` : '';
     const pills = [
       j.seniority     ? `<span class="tag" style="background:rgba(99,102,241,0.15);color:#a5b4fc">${j.seniority}</span>` : '',
       j.salary        ? `<span class="tag" style="background:rgba(16,185,129,0.12);color:#6ee7b7">💰 ${j.salary}</span>` : '',
@@ -1009,14 +1025,6 @@ function renderSearchResults() {
       j.remote        ? `<span class="tag" style="background:rgba(6,182,212,0.12);color:#67e8f9">🌐 Remote</span>` : '',
       j.publisher     ? `<span class="tag" style="background:rgba(255,255,255,0.04);color:var(--muted);font-size:10px">via ${j.publisher}</span>` : '',
     ].filter(Boolean).join('');
-
-    // Score badge
-    let badgeHtml = `<div id="score-badge-${i}" class="score-badge-ring"></div>`;
-
-    // Rank label (only after scoring)
-    const rankLabel = (sc !== undefined && i < 10)
-      ? `<div class="job-rank">#${i + 1}</div>` : '';
-
     return `
     <div class="job-card ${cardClass}" id="sjob-${i}">
       ${rankLabel}
@@ -1026,7 +1034,7 @@ function renderSearchResults() {
           <div class="job-card-sub">${meta}</div>
           ${pills ? `<div class="tags" style="margin-top:6px">${pills}</div>` : ''}
         </div>
-        ${badgeHtml}
+        <div id="score-badge-${i}" class="score-badge-ring"></div>
       </div>
       <div id="tailor-result-${i}"></div>
       <div class="job-card-actions">
@@ -1038,13 +1046,73 @@ function renderSearchResults() {
     </div>`;
   }).join('');
 
-  container.innerHTML = scoreAllBtn + summaryBar +
-    `<div id="searchResultsGrid">${cardsHtml}</div>`;
+  // ── Pagination controls
+  const pageNums = [];
+  for (let p = 0; p < totalPages; p++) {
+    const isActive = p === currentPage;
+    const label    = p + 1;
+    // Show first, last, current ±1, and ellipsis
+    if (p === 0 || p === totalPages - 1 || Math.abs(p - currentPage) <= 1) {
+      pageNums.push(`
+        <button onclick="goToPage(${p})" style="
+          min-width:32px;height:32px;border-radius:8px;border:1px solid ${isActive ? 'var(--primary)' : 'var(--border)'};
+          background:${isActive ? 'rgba(59,130,246,0.2)' : 'transparent'};
+          color:${isActive ? 'var(--primary)' : 'var(--muted)'};
+          font-family:var(--mono);font-size:12px;cursor:pointer;font-weight:${isActive ? '700' : '400'};
+          transition:all 0.15s">${label}</button>`);
+    } else if (Math.abs(p - currentPage) === 2) {
+      pageNums.push(`<span style="color:var(--muted);align-self:center;font-size:12px">…</span>`);
+    }
+  }
 
-  // Restore score badges if jobs are already scored (after re-render)
-  searchedJobs.forEach((j, i) => {
+  const pagination = totalPages > 1 ? `
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:16px;flex-wrap:wrap">
+      <button onclick="goToPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''} style="
+        height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--border);
+        background:transparent;color:${currentPage === 0 ? 'var(--subtle)' : 'var(--text)'};
+        font-family:var(--font);font-size:12px;cursor:${currentPage === 0 ? 'default' : 'pointer'}">
+        ← Prev
+      </button>
+      ${pageNums.join('')}
+      <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages - 1 ? 'disabled' : ''} style="
+        height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--border);
+        background:transparent;color:${currentPage === totalPages - 1 ? 'var(--subtle)' : 'var(--text)'};
+        font-family:var(--font);font-size:12px;cursor:${currentPage === totalPages - 1 ? 'default' : 'pointer'}">
+        Next →
+      </button>
+    </div>
+    <div style="text-align:center;margin-top:6px;font-size:10px;color:var(--muted);font-family:var(--mono)">
+      Page ${currentPage + 1} of ${totalPages}
+    </div>` : '';
+
+  container.innerHTML = scoreAllBtn + summaryBar +
+    `<div id="searchResultsGrid">${cardsHtml}</div>` + pagination;
+
+  // Restore score badges for visible jobs
+  pageJobs.forEach((j, pi) => {
+    const i = start + pi;
     if (j._score !== undefined) _paintBadge(i, j._score, j._rec);
+    if ((j._score || 0) >= 80) {
+      const card = document.getElementById(`sjob-${i}`);
+      if (card && !card.querySelector('.gen-cv-btn')) {
+        const actions = card.querySelector('.job-card-actions');
+        const b = document.createElement('button');
+        b.className = 'btn btn-success btn-sm gen-cv-btn';
+        b.innerHTML = '📄 CV';
+        b.onclick = () => generateCV(i);
+        actions.prepend(b);
+      }
+    }
   });
+}
+
+function goToPage(p) {
+  const totalPages = Math.ceil(searchedJobs.length / PAGE_SIZE);
+  if (p < 0 || p >= totalPages) return;
+  currentPage = p;
+  renderSearchResults();
+  // Scroll search results into view
+  document.getElementById('searchResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function _paintBadge(i, score, rec) {
@@ -1127,8 +1195,9 @@ async function scoreAllJobs() {
   if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner"></span> Scoring...`; }
   await Promise.all(searchedJobs.map((_, i) => scoreJob(i)));
 
-  // Sort by score descending and re-render (renderSearchResults restores all badges)
+  // Sort by score descending, go back to page 1, re-render
   searchedJobs.sort((a, b) => (b._score || 0) - (a._score || 0));
+  currentPage = 0;
   renderSearchResults();
 
   // Add "Generate CV" buttons for 80+ jobs
