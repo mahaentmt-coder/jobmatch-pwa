@@ -67,6 +67,17 @@ Data Governance, ITIL, ISO 27001, Executive Advisory, Portfolio Management
 
 // ── MAIN ENTRY POINT ─────────────────────────────────────────────────────────
 function checkNewJobAlerts() {
+  // Throttle: only run once every 12 hours
+  const props     = PropertiesService.getScriptProperties();
+  const lastRun   = parseInt(props.getProperty("lastRun") || "0", 10);
+  const now       = Date.now();
+  const TWELVE_H  = 12 * 60 * 60 * 1000;
+  if (now - lastRun < TWELVE_H) {
+    Logger.log(`Skipping — last run was ${Math.round((now - lastRun) / 3600000, 1)}h ago (< 12h)`);
+    return;
+  }
+  props.setProperty("lastRun", String(now));
+
   ensureLabel_();
 
   // Find unprocessed emails — this inbox only receives LinkedIn job alerts
