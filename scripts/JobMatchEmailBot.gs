@@ -30,6 +30,7 @@ const CONFIG = {
   REPORT_TO    : "h.mirisaee@gmail.com",
   LABEL_DONE   : "jm-processed",
   MIN_SCORE    : 70,                          // only report jobs scoring 70+
+  MAX_TO_SCORE : 30,                          // score only top 30 (avoids 6-min GAS timeout)
   THROTTLE_MS  : 22 * 60 * 60 * 1000,        // 22h gap — prevents double-fire if trigger drifts
 };
 
@@ -114,7 +115,8 @@ function checkNewJobAlerts() {
   ensureLabel_();
 
   // ── Step 1: Extract jobs from unprocessed LinkedIn alert emails
-  const threads    = GmailApp.search(`-label:${CONFIG.LABEL_DONE}`, 0, 20);
+  // Only process LinkedIn job alert emails — not our own report emails
+  const threads    = GmailApp.search(`from:jobalerts-noreply@linkedin.com -label:${CONFIG.LABEL_DONE}`, 0, 20);
   const emailJobs  = [];
   const titlesSeen = new Set();
 
@@ -141,12 +143,25 @@ function checkNewJobAlerts() {
     const key = j.title.toLowerCase();
     if (!titlesSeen.has(key)) { titlesSeen.add(key); merged.push(j); }
   }
-  Logger.log(`Total unique jobs to score: ${merged.length}`);
+  Logger.log(`Total unique jobs before pre-rank: ${merged.length}`);
   if (!merged.length) { Logger.log("Nothing to score — exiting."); return; }
+
+  // ── Step 3b: Pre-rank by title relevance, keep top MAX_TO_SCORE
+  // Prioritise Director/Head/VP titles; deprioritise Manager/Lead/Analyst
+  const titleScore_ = t => {
+    const l = (t || "").toLowerCase();
+    if (/\b(director|head of|vp|vice president|chief)\b/.test(l)) return 3;
+    if (/\b(principal|partner|executive)\b/.test(l))               return 2;
+    if (/\b(senior|lead|programme|program)\b/.test(l))             return 1;
+    return 0;
+  };
+  merged.sort((a, b) => titleScore_(b.title) - titleScore_(a.title));
+  const toScore = merged.slice(0, CONFIG.MAX_TO_SCORE);
+  Logger.log(`Pre-ranked: scoring top ${toScore.length} of ${merged.length} jobs`);
 
   // ── Step 4: Score each job
   const scored = [];
-  for (const j of merged) {
+  for (const j of toScore) {
     const result = j.desc
       ? scoreJob_(j.title, j.company, j.desc)
       : { score: null, rec: "Description not available", gaps: [], strengths: [] };
