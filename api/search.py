@@ -7,6 +7,23 @@ RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
 
 EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands", "Switzerland", "Ireland", "Belgium"]
 
+# Only keep jobs from trusted, high-quality publishers
+TRUSTED_PUBLISHERS = {
+    "linkedin", "indeed", "glassdoor", "ziprecruiter", "monster",
+    "reed", "totaljobs", "cwjobs", "jobsite", "cv-library",
+    "michaelpage", "hays", "robertwalters", "robert walters",
+    "manpower", "randstad", "adecco", "stepstone", "xing",
+    "bayt", "naukrigulf", "experteer", "efinancialcareers",
+    "jobs.ac.uk", "guardian jobs", "the guardian",
+}
+
+def is_trusted_publisher(publisher: str) -> bool:
+    """Return True if publisher is a known quality source."""
+    if not publisher:
+        return True  # no publisher info → keep (likely direct from employer)
+    p = publisher.lower()
+    return any(t in p for t in TRUSTED_PUBLISHERS)
+
 # Patterns that indicate a non-English language is REQUIRED
 # Matches things like "Dutch required", "fluent in German", "native French speaker"
 import re
@@ -122,6 +139,10 @@ class handler(BaseHTTPRequestHandler):
                 if job_id in seen:
                     continue
                 seen.add(job_id)
+
+                # Skip low-quality aggregator sources
+                if not is_trusted_publisher(item.get("job_publisher", "")):
+                    continue
 
                 # Skip jobs that require a non-English language
                 if requires_non_english(item.get("job_description", "")):
