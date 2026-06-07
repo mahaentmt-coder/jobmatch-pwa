@@ -1,57 +1,8 @@
 from http.server import BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.parse, urllib.error
 
-ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
-
-# Maps location keywords → (country_code, city_filter)
-# country_code = Adzuna endpoint; city_filter = `where` param (empty = whole country)
-LOCATION_MAP = [
-    # Countries — use endpoint only, no city filter
-    (["uk", "united kingdom", "britain", "england", "scotland", "wales"], "gb", ""),
-    (["netherlands", "holland"],                                           "nl", ""),
-    (["germany", "deutschland"],                                           "de", ""),
-    (["france"],                                                           "fr", ""),
-    (["uae", "united arab emirates"],                                      "ae", ""),
-    (["south africa"],                                                     "za", ""),
-    (["singapore"],                                                        "sg", ""),
-    (["australia"],                                                        "au", ""),
-    (["canada"],                                                           "ca", ""),
-    (["usa", "united states", "america"],                                  "us", ""),
-    (["india"],                                                            "in", ""),
-    # Cities — use nearest country endpoint + city filter
-    (["london"],                                                           "gb", "London"),
-    (["manchester"],                                                       "gb", "Manchester"),
-    (["amsterdam"],                                                        "nl", "Amsterdam"),
-    (["berlin"],                                                           "de", "Berlin"),
-    (["munich", "münchen"],                                                "de", "Munich"),
-    (["paris"],                                                            "fr", "Paris"),
-    (["dubai"],                                                            "ae", "Dubai"),
-    (["sydney"],                                                           "au", "Sydney"),
-    (["toronto"],                                                          "ca", "Toronto"),
-    (["new york", "nyc"],                                                  "us", "New York"),
-]
-
-EMEA_COUNTRIES = ["gb", "de", "fr", "nl", "ae", "za"]
-
-
-def resolve_location(location: str):
-    """Returns list of (country_code, city_filter) tuples to search."""
-    if not location:
-        return [(c, "") for c in EMEA_COUNTRIES]
-
-    loc = location.lower().strip()
-
-    # EMEA / global → search all EMEA countries
-    if any(k in loc for k in ["emea", "worldwide", "global", "remote", "anywhere"]):
-        return [(c, "") for c in EMEA_COUNTRIES]
-
-    # Try to match known locations
-    for keywords, country, city in LOCATION_MAP:
-        if any(k in loc for k in keywords):
-            return [(country, city)]
-
-    # Unknown location — search EMEA but pass location as city hint in gb
-    return [(c, "") for c in EMEA_COUNTRIES]
+RAPIDAPI_HOST = "linkedin-jobs-search.p.rapidapi.com"
+RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/"
 
 
 class handler(BaseHTTPRequestHandler):
@@ -72,104 +23,81 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "title parameter required"}, 400)
                 return
 
-            app_id  = os.environ.get("ADZUNA_APP_ID", "")
-            app_key = os.environ.get("ADZUNA_APP_KEY", "")
-            if not app_id or not app_key:
-                self._json({"error": "ADZUNA_APP_ID and ADZUNA_APP_KEY environment variables not set"}, 500)
+            api_key = os.environ.get("RAPIDAPI_KEY", "")
+            if not api_key:
+                self._json({"error": "RAPIDAPI_KEY environment variable not set"}, 500)
                 return
 
-            # Parse OR queries: "Digital Transformation Director or Executive"
-            # → what_phrase="Digital Transformation", what_or="Director Executive"
-            what_phrase = title
-            what_or     = ""
-            if " or " in title.lower():
-                idx         = title.lower().index(" or ")
-                left        = title[:idx].strip()
-                right       = title[idx+4:].strip()
-                left_words  = left.split()
-                right_words = right.split()
-                suffix_len  = len(right_words)
-                base_words  = left_words[:-suffix_len] if suffix_len < len(left_words) else left_words[:-1]
-                or_terms    = left_words[len(base_words):] + right_words
-                what_phrase = " ".join(base_words)
-                what_or     = " ".join(or_terms)
+            # Build keyword query — handle OR syntax
+            # "Digital Transformation Director or Executive" → keywords as-is
+            keywords = title
 
-            targets = resolve_location(location)
-            jobs    = []
-            seen    = set()
+            params = urllib.parse.urlencode({
+                "keywords":        keywords,
+                "location":        location or "Worldwide",
+                "dateSincePosted": "past month",
+                "jobType":         "full time",
+                "limit":           str(min(limit, 10)),
+                "offset":          "0",
+            })
+            url = f"{RAPIDAPI_URL}?{params}"
 
-            for country, city in targets:
-                if len(jobs) >= limit:
-                    break
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "x-rapidapi-host": RAPIDAPI_HOST,
+                    "x-rapidapi-key":  api_key,
+                },
+                method="GET"
+            )
 
-                p = {
-                    "app_id":           app_id,
-                    "app_key":          app_key,
-                    "results_per_page": min(limit, 10),
-                    "what_phrase":      what_phrase,
-                }
-                if what_or:
-                    p["what_or"] = what_or
-                if city:
-                    p["where"] = city
+            try:
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    raw = json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", errors="replace")
+                self._json({"error": f"LinkedIn API {e.code}: {body[:300]}"}, 502)
+                return
 
-                url = f"{ADZUNA_BASE}/{country}/search/1?{urllib.parse.urlencode(p)}"
-                req = urllib.request.Request(url, method="GET")
+            # Normalise response — returns a list directly
+            items = raw if isinstance(raw, list) else raw.get("data", raw.get("jobs", []))
 
-                try:
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        data = json.loads(resp.read())
-                except urllib.error.HTTPError:
-                    continue
+            jobs = []
+            for item in items:
+                title_str   = item.get("position", item.get("title", ""))
+                title_lower = title_str.lower()
+                company     = item.get("company",  item.get("companyName", ""))
+                location_str = item.get("location", item.get("jobLocation", ""))
+                url_str      = item.get("jobUrl",  item.get("url", item.get("applyUrl", "")))
+                posted       = item.get("postedAt", item.get("date", item.get("publishedAt", "")))
+                description  = item.get("description", item.get("jobDescription", ""))
+                salary_str   = item.get("salary", item.get("salaryRange", ""))
 
-                for item in data.get("results", []):
-                    job_id = str(item.get("id", ""))
-                    if job_id in seen:
-                        continue
-                    seen.add(job_id)
+                # Infer seniority from title
+                if any(w in title_lower for w in ["chief", "cto", "cio", "cdo", "cxo", "vp", "vice president", "c-suite"]):
+                    seniority = "Executive"
+                elif any(w in title_lower for w in ["director", "head of", "principal"]):
+                    seniority = "Director"
+                elif any(w in title_lower for w in ["senior", "lead", "manager", "architect"]):
+                    seniority = "Senior"
+                elif any(w in title_lower for w in ["junior", "graduate", "intern", "entry"]):
+                    seniority = "Junior"
+                else:
+                    seniority = "Mid"
 
-                    title_str   = item.get("title", "")
-                    title_lower = title_str.lower()
-
-                    if any(w in title_lower for w in ["chief", "cto", "cio", "cdo", "vp ", "vice president"]):
-                        seniority = "Executive"
-                    elif any(w in title_lower for w in ["director", "head of", "principal"]):
-                        seniority = "Director"
-                    elif any(w in title_lower for w in ["senior", "lead", "manager", "architect"]):
-                        seniority = "Senior"
-                    elif any(w in title_lower for w in ["junior", "graduate", "intern", "entry"]):
-                        seniority = "Junior"
-                    else:
-                        seniority = "Mid"
-
-                    sal_min = item.get("salary_min")
-                    sal_max = item.get("salary_max")
-                    # Format salary with local currency symbol
-                    symbols = {"gb": "£", "de": "€", "fr": "€", "nl": "€", "ae": "AED ", "za": "R", "us": "$", "au": "A$", "ca": "C$"}
-                    sym = symbols.get(country, "")
-                    if sal_min and sal_max:
-                        salary = f"{sym}{int(sal_min):,} – {sym}{int(sal_max):,}"
-                    elif sal_min:
-                        salary = f"{sym}{int(sal_min):,}+"
-                    else:
-                        salary = ""
-
-                    jobs.append({
-                        "id":            job_id,
-                        "title":         title_str,
-                        "company":       item.get("company", {}).get("display_name", ""),
-                        "location":      item.get("location", {}).get("display_name", country.upper()),
-                        "description":   item.get("description", ""),
-                        "url":           item.get("redirect_url", ""),
-                        "posted":        item.get("created", "")[:10] if item.get("created") else "",
-                        "salary":        salary,
-                        "seniority":     seniority,
-                        "contract_type": item.get("contract_type", ""),
-                        "contract_time": item.get("contract_time", ""),
-                    })
-
-                    if len(jobs) >= limit:
-                        break
+                jobs.append({
+                    "id":            item.get("id", item.get("jobId", str(len(jobs)))),
+                    "title":         title_str,
+                    "company":       company,
+                    "location":      location_str,
+                    "description":   description,
+                    "url":           url_str,
+                    "posted":        str(posted)[:10] if posted else "",
+                    "salary":        str(salary_str) if salary_str else "",
+                    "seniority":     seniority,
+                    "contract_type": item.get("employmentType", item.get("jobType", "")),
+                    "contract_time": "",
+                })
 
             self._json({"jobs": jobs, "count": len(jobs)})
 
