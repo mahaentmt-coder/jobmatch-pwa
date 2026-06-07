@@ -42,10 +42,11 @@ class handler(BaseHTTPRequestHandler):
                 queries.append(f"{title} in {location}")
 
             def fetch_query(query):
+                # Fetch 2 pages per query so after dedup we always hit the limit
                 params = urllib.parse.urlencode({
                     "query":            query,
                     "page":             "1",
-                    "num_pages":        "1",
+                    "num_pages":        "2",
                     "date_posted":      "month",
                     "employment_types": "FULLTIME",
                 })
