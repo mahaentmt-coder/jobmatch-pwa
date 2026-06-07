@@ -386,6 +386,10 @@
   }
   .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
 
+  /* ── Preset query buttons ── */
+  .preset-q { border: 1px solid var(--border) !important; transition: all 0.2s; }
+  .preset-q.active-preset { border-color: var(--primary) !important; color: var(--primary) !important; background: rgba(59,130,246,0.1) !important; }
+
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 0; }
 </style>
@@ -429,11 +433,19 @@
 
   <div class="card">
     <div class="card-title">🔍 Search LinkedIn Jobs</div>
-    <label>Job Title</label>
-    <input type="text" id="searchTitle" placeholder="e.g. Digital Transformation Director" value="Digital Transformation Director or Executive">
     <label>Location</label>
-    <input type="text" id="searchLocation" placeholder="e.g. United Kingdom" value="EMEA">
-    <button class="btn btn-primary" id="searchBtn" onclick="searchLinkedIn()">🔍 Search Jobs</button>
+    <input type="text" id="searchLocation" placeholder="e.g. Netherlands" value="Netherlands">
+    <div style="margin-top:12px">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.5px;margin-bottom:8px">PROFILE-MATCHED QUERIES</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px" id="presetBtns">
+        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'Digital Transformation Director or Manager')">🔄 Digital Transformation</button>
+        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'Programme Director or Head')">📋 Programme Director</button>
+        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'AI Data Director or Lead')">🤖 AI & Data</button>
+        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'IT Program Manager Senior')">💻 IT Program Manager</button>
+        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'Strategy Director or Consultant')">🎯 Strategy Director</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="searchBtn" onclick="searchLinkedIn()" style="margin-top:12px">🔍 Search All Queries</button>
     <div id="searchResults"></div>
   </div>
 
@@ -635,40 +647,61 @@ function saveJobs() { localStorage.setItem('jm_jobs', JSON.stringify(jobs)); }
 // ── LinkedIn Search ────────────────────────────────────────────────────────
 let searchedJobs = []; // holds current search results
 
+function togglePreset(el, query) {
+  el.classList.toggle('active-preset');
+}
+
 async function searchLinkedIn() {
-  const title    = document.getElementById('searchTitle').value.trim();
   const location = document.getElementById('searchLocation').value.trim();
-  if (!title) { toast('⚠️ Enter a job title to search'); return; }
+
+  // Collect all active preset queries
+  const activePresets = [...document.querySelectorAll('.preset-q.active-preset')]
+    .map(b => b.getAttribute('onclick').match(/'([^']+)'/)?.[1]).filter(Boolean);
+
+  if (!activePresets.length) { toast('⚠️ Select at least one query'); return; }
 
   const btn = document.getElementById('searchBtn');
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span> Searching...`;
+  btn.innerHTML = `<span class="spinner"></span> Searching ${activePresets.length} queries...`;
   document.getElementById('searchResults').innerHTML = '';
 
   try {
-    const params = new URLSearchParams({ title, location, limit: 50 });
-    const res  = await fetch(`/api/search?${params}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    // Run all queries in parallel
+    const results = await Promise.all(activePresets.map(title =>
+      fetch(`/api/search?${new URLSearchParams({ title, location, limit: 20 })}`)
+        .then(r => r.json())
+        .then(d => d.jobs || [])
+        .catch(() => [])
+    ));
 
-    if (!data.jobs.length) {
+    // Merge and deduplicate by job id
+    const seen = new Set();
+    const allJobs = [];
+    for (const batch of results) {
+      for (const job of batch) {
+        if (!seen.has(job.id)) {
+          seen.add(job.id);
+          allJobs.push(job);
+        }
+      }
+    }
+
+    if (!allJobs.length) {
       document.getElementById('searchResults').innerHTML =
-        `<div class="empty" style="padding:24px 0"><div class="empty-text">No jobs found. Try a broader title or location.</div></div>`;
+        `<div class="empty" style="padding:24px 0"><div class="empty-text">No jobs found. Try changing location or queries.</div></div>`;
       return;
     }
 
-    searchedJobs = data.jobs;
+    searchedJobs = allJobs;
     renderSearchResults();
+    toast(`✅ Found ${allJobs.length} unique jobs (last 7 days) — scoring...`);
 
-    toast(`✅ Found ${data.jobs.length} jobs (last 7 days) — scoring...`);
-
-    // Auto-score all results if resume is available
     if (resume) await scoreAllJobs();
   } catch(e) {
     toast('❌ ' + e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '🔍 Search Jobs';
+    btn.innerHTML = '🔍 Search All Queries';
   }
 }
 
