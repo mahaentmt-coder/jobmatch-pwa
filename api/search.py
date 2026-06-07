@@ -7,6 +7,48 @@ RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
 
 EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands"]
 
+# Patterns that indicate a non-English language is REQUIRED
+# Matches things like "Dutch required", "fluent in German", "native French speaker"
+import re
+LANGUAGE_REQUIRED_PATTERNS = re.compile(
+    r'\b('
+    r'dutch|nederlands|nederlandstalig|'
+    r'german|deutsch|deutschkenntnisse|'
+    r'french|français|francophone|'
+    r'arabic|عربي|'
+    r'spanish|español|'
+    r'italian|italiano|'
+    r'portuguese|português|'
+    r'mandarin|chinese|'
+    r'japanese|hindi|'
+    r'polish|swedish|danish|norwegian|finnish|turkish'
+    r')\b.{0,60}\b(required|mandatory|must|essential|vereist|verplicht|zwingend|erforderlich|exigé|nécessaire|fluent|native|proficient|spoken|written|speaking)\b'
+    r'|'
+    r'\b(fluent|native|proficient|working proficiency|business level)\b.{0,40}\b('
+    r'dutch|german|french|arabic|spanish|italian|portuguese|mandarin|japanese|polish|swedish|danish|norwegian|finnish|turkish'
+    r')\b',
+    re.IGNORECASE
+)
+
+# Patterns that indicate language is optional (negate the match)
+LANGUAGE_OPTIONAL_PATTERNS = re.compile(
+    r'\b(plus|advantage|bonus|preferred|not required|not mandatory|nice to have|pre|desirable)\b',
+    re.IGNORECASE
+)
+
+def requires_non_english(description: str) -> bool:
+    """Return True if the job description requires a non-English language."""
+    if not description:
+        return False
+    for match in LANGUAGE_REQUIRED_PATTERNS.finditer(description):
+        # Check surrounding context (80 chars) for optional language indicators
+        start  = max(0, match.start() - 80)
+        end    = min(len(description), match.end() + 80)
+        context = description[start:end]
+        if not LANGUAGE_OPTIONAL_PATTERNS.search(context):
+            return True
+    return False
+
 
 class handler(BaseHTTPRequestHandler):
 
@@ -80,6 +122,10 @@ class handler(BaseHTTPRequestHandler):
                 if job_id in seen:
                     continue
                 seen.add(job_id)
+
+                # Skip jobs that require a non-English language
+                if requires_non_english(item.get("job_description", "")):
+                    continue
 
                 title_str   = item.get("job_title", "")
                 title_lower = title_str.lower()
