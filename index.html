@@ -714,6 +714,13 @@ async function scoreJob(i) {
   if (!resume) { toast('⚠️ Save your resume first'); return; }
   const j = searchedJobs[i];
   const badge = document.getElementById(`score-badge-${i}`);
+
+  // Skip jobs with no description
+  if (!j.description || j.description.trim().length < 50) {
+    badge.innerHTML = `<span style="font-size:9px;color:var(--muted);text-align:center;display:block">no<br>desc</span>`;
+    return;
+  }
+
   badge.innerHTML = `<span class="spinner" style="width:16px;height:16px;border-width:2px"></span>`;
 
   try {
@@ -732,10 +739,14 @@ async function scoreJob(i) {
         <div style="font-family:var(--mono);font-size:20px;font-weight:600;color:${color}">${score}</div>
         <div style="font-size:9px;color:var(--muted);margin-top:2px">${rec.split(' ')[0]}</div>
       </div>`;
-    // store score on job for sorting
     searchedJobs[i]._score = score;
   } catch(e) {
-    badge.innerHTML = `<span style="font-size:10px;color:var(--danger)">err</span>`;
+    badge.innerHTML = `<span title="${e.message}" style="font-size:9px;color:var(--danger);text-align:center;display:block;cursor:help">retry</span>`;
+    // Auto-retry once after 3s (handles transient timeouts)
+    setTimeout(async () => {
+      const current = document.getElementById(`score-badge-${i}`);
+      if (current && current.innerHTML.includes('retry')) await scoreJob(i);
+    }, 3000);
   }
 }
 
