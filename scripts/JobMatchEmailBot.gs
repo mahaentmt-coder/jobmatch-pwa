@@ -86,10 +86,10 @@ Executive Advisory, Portfolio Management, Change Management
 // ─────────────────────────────────────────────────────────────────────────────
 // Job titles sent to Vercel /api/search — Vercel calls JSearch from its own IP (no blocking)
 const SEARCH_QUERIES = [
-  "Digital Transformation Director",
-  "Programme Director Digital Transformation",
+  "Digital Transformation Director or Executive",
+  "Programme Director Transformation",
   "AI Transformation Director",
-  "IT Program Director Executive",
+  "Head of Digital Transformation",
   "Strategy Director Digital",
 ];
 
@@ -159,11 +159,12 @@ function checkNewJobAlerts() {
   const toScore = merged.slice(0, CONFIG.MAX_TO_SCORE);
   Logger.log(`Pre-ranked: scoring top ${toScore.length} of ${merged.length} jobs`);
 
-  // ── Step 4: Score each job
+  // ── Step 4: Score each job (fetch description for email-sourced jobs via Vercel proxy)
   const scored = [];
   for (const j of toScore) {
-    const result = j.desc
-      ? scoreJob_(j.title, j.company, j.desc)
+    const desc   = j.desc || fetchDescription_(j.title, j.company);
+    const result = desc
+      ? scoreJob_(j.title, j.company, desc)
       : { score: null, rec: "Description not available", gaps: [], strengths: [] };
     scored.push({ ...j, desc: undefined, ...result });
     Logger.log(`  [${result.score ?? "N/A"}] ${j.title} @ ${j.company}`);
@@ -293,6 +294,25 @@ function fetchDescription_(title, company) {
     const best = jobs.find(j => j.employer_name?.toLowerCase().includes(co) && j.job_description?.length > 200)
               || jobs.find(j => j.job_description?.length > 200);
     return best?.job_description || null;
+  } catch (e) {
+    Logger.log(`fetchDescription_ error: ${e}`);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FETCH DESCRIPTION FOR EMAIL-SOURCED JOBS (via Vercel proxy — no direct JSearch needed)
+// ─────────────────────────────────────────────────────────────────────────────
+function fetchDescription_(title, company) {
+  try {
+    const url  = `${CONFIG.SEARCH_URL}?title=${encodeURIComponent(title)}&limit=10`;
+    const resp = UrlFetchApp.fetch(url, { method: "get", muteHttpExceptions: true, deadline: 20 });
+    if (resp.getResponseCode() !== 200) return null;
+    const jobs = JSON.parse(resp.getContentText()).jobs || [];
+    const co   = (company || "").toLowerCase().split(" ")[0];
+    const best = jobs.find(j => (j.company || "").toLowerCase().includes(co) && j.description)
+              || jobs.find(j => j.description);
+    return best?.description || null;
   } catch (e) {
     Logger.log(`fetchDescription_ error: ${e}`);
     return null;
