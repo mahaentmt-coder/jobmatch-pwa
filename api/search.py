@@ -5,17 +5,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
 RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
 
+# Top 10 EMEA markets for the web app — keeps total JSearch calls to ~10
+# and fits comfortably within Vercel Hobby 10s timeout.
+# The email bot (Google Apps Script) uses all 25 countries with no timeout.
 EMEA_LOCATIONS = [
-    # Western Europe
-    "UK", "Ireland", "Netherlands", "Belgium", "Luxembourg",
-    "Germany", "Austria", "Switzerland",
-    "France", "Spain", "Portugal",
-    "Denmark", "Sweden", "Norway", "Finland",
-    "Poland", "Czechia",
-    # Middle East
-    "UAE", "Saudi Arabia", "Qatar", "Bahrain", "Kuwait", "Jordan",
-    # Africa
-    "South Africa", "Egypt", "Morocco",
+    "UK", "Netherlands", "UAE", "Ireland",
+    "Germany", "Saudi Arabia", "Switzerland",
+    "Belgium", "Denmark", "Luxembourg",
 ]
 
 # Block known low-quality / spam aggregators only — everything else passes
