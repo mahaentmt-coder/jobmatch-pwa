@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
 RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
 
-EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands"]
+EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands", "Switzerland", "Ireland", "Belgium"]
 
 # Patterns that indicate a non-English language is REQUIRED
 # Matches things like "Dutch required", "fluent in German", "native French speaker"
