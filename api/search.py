@@ -154,22 +154,27 @@ class handler(BaseHTTPRequestHandler):
                     },
                     method="GET"
                 )
-                try:
-                    with urllib.request.urlopen(req, timeout=9) as resp:
-                        data = json.loads(resp.read())
-                        return data.get("data", [])
-                except urllib.error.HTTPError as e:
-                    errors.append(f"HTTP {e.code} for: {query}")
-                    return []
-                except Exception as ex:
-                    errors.append(f"ERR {type(ex).__name__}: {query}")
-                    return []
+                for attempt in range(2):  # retry once on 429
+                    try:
+                        with urllib.request.urlopen(req, timeout=9) as resp:
+                            data = json.loads(resp.read())
+                            return data.get("data", [])
+                    except urllib.error.HTTPError as e:
+                        if e.code == 429 and attempt == 0:
+                            time.sleep(2)  # back off and retry once
+                            continue
+                        errors.append(f"HTTP {e.code} for: {query}")
+                        return []
+                    except Exception as ex:
+                        errors.append(f"ERR {type(ex).__name__}: {query}")
+                        return []
+                return []
 
+            # Run queries sequentially to avoid burst rate-limiting
+            # (5 queries × ~0.5s each = ~2.5s, well within 10s Vercel limit)
             all_items = []
-            with ThreadPoolExecutor(max_workers=25) as pool:
-                futures = [pool.submit(fetch_query, q) for q in queries]
-                for result in as_completed(futures):
-                    all_items.extend(result.result())
+            for q in queries:
+                all_items.extend(fetch_query(q))
 
             jobs        = []
             seen        = set()
