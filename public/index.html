@@ -946,10 +946,10 @@ async function searchLinkedIn() {
   try {
     // Run all queries in parallel
     const results = await Promise.all(activePresets.map(title =>
-      fetch(`/api/search?${new URLSearchParams({ title, location, limit: 20 })}`)
-        .then(r => r.json())
-        .then(d => d.jobs || [])
-        .catch(() => [])
+      fetch(`/api/search?${new URLSearchParams({ title, location, limit: 200 })}`)
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        .then(d => { if (d.error) throw new Error(d.error); return d.jobs || []; })
+        .catch(e => { console.warn(`Search failed for "${title}": ${e.message}`); return []; })
     ));
 
     // Merge and deduplicate by job id
@@ -973,7 +973,8 @@ async function searchLinkedIn() {
     searchedJobs = allJobs;
     currentPage  = 0;
     renderSearchResults();
-    toast(`✅ Found ${allJobs.length} unique jobs (last 7 days) — scoring...`);
+    const rawTotal = results.flat().length;
+    toast(`✅ ${allJobs.length} jobs (${rawTotal} raw → filtered) — scoring...`);
 
     if (resume) await scoreAllJobs();
   } catch(e) {

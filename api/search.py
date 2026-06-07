@@ -18,22 +18,20 @@ EMEA_LOCATIONS = [
     "South Africa", "Egypt", "Morocco",
 ]
 
-# Only keep jobs from trusted, high-quality publishers
-TRUSTED_PUBLISHERS = {
-    "linkedin", "indeed", "glassdoor", "ziprecruiter", "monster",
-    "reed", "totaljobs", "cwjobs", "jobsite", "cv-library",
-    "michaelpage", "hays", "robertwalters", "robert walters",
-    "manpower", "randstad", "adecco", "stepstone", "xing",
-    "bayt", "naukrigulf", "experteer", "efinancialcareers",
-    "jobs.ac.uk", "guardian jobs", "the guardian",
+# Block known low-quality / spam aggregators only — everything else passes
+BLOCKED_PUBLISHERS = {
+    "joblead", "trabjao", "learn4good", "jobilize", "trovit",
+    "jobomas", "jobtome", "jobrapido", "jobsora", "careerjet",
+    "neuvoo", "talent.com", "jobissite", "whatjobs",
+    "jobvacancies", "jobboard", "jobberman",
 }
 
 def is_trusted_publisher(publisher: str) -> bool:
-    """Return True if publisher is a known quality source."""
+    """Return False only for known junk aggregators; keep everything else."""
     if not publisher:
-        return True  # no publisher info → keep (likely direct from employer)
+        return True  # no publisher field = direct employer posting, always keep
     p = publisher.lower()
-    return any(t in p for t in TRUSTED_PUBLISHERS)
+    return not any(b in p for b in BLOCKED_PUBLISHERS)
 
 # Patterns that indicate a non-English language is REQUIRED
 # Matches things like "Dutch required", "fluent in German", "native French speaker"
@@ -123,7 +121,7 @@ class handler(BaseHTTPRequestHandler):
 
             title    = qs.get("title",    [""])[0].strip()
             location = qs.get("location", [""])[0].strip()
-            limit    = int(qs.get("limit", ["50"])[0])
+            limit    = int(qs.get("limit", ["200"])[0])
 
             if not title:
                 self._json({"error": "title parameter required"}, 400)
@@ -144,6 +142,8 @@ class handler(BaseHTTPRequestHandler):
             else:
                 queries.append(f"{title} in {location}")
 
+            import time as _time
+
             def fetch_query(query):
                 params = urllib.parse.urlencode({
                     "query":            query,
@@ -160,16 +160,24 @@ class handler(BaseHTTPRequestHandler):
                     },
                     method="GET"
                 )
-                try:
-                    with urllib.request.urlopen(req, timeout=20) as resp:
-                        return json.loads(resp.read()).get("data", [])
-                except Exception:
-                    return []
+                for attempt in range(3):          # retry up to 3× on rate-limit
+                    try:
+                        with urllib.request.urlopen(req, timeout=20) as resp:
+                            return json.loads(resp.read()).get("data", [])
+                    except urllib.error.HTTPError as e:
+                        if e.code == 429:         # rate-limited — back off and retry
+                            _time.sleep(2 ** attempt)
+                            continue
+                        return []
+                    except Exception:
+                        return []
+                return []
 
-            # Fetch all queries in parallel
+            # Fetch all queries in parallel (8 workers to respect rate limits)
             all_items = []
             with ThreadPoolExecutor(max_workers=8) as pool:
-                for result in as_completed([pool.submit(fetch_query, q) for q in queries]):
+                futures = [pool.submit(fetch_query, q) for q in queries]
+                for result in as_completed(futures):
                     all_items.extend(result.result())
 
             jobs = []
