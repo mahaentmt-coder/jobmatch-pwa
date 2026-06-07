@@ -425,7 +425,7 @@
 <!-- SEARCH -->
 <div class="screen" id="screen-search">
   <div class="section-heading">Job Search</div>
-  <div class="section-sub">Search LinkedIn or paste a job description</div>
+  <div class="section-sub">Live LinkedIn jobs · past 7 days · no duplicates</div>
 
   <div class="card">
     <div class="card-title">🔍 Search LinkedIn Jobs</div>
@@ -646,7 +646,7 @@ async function searchLinkedIn() {
   document.getElementById('searchResults').innerHTML = '';
 
   try {
-    const params = new URLSearchParams({ title, location, limit: 10 });
+    const params = new URLSearchParams({ title, location, limit: 50 });
     const res  = await fetch(`/api/search?${params}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -660,7 +660,7 @@ async function searchLinkedIn() {
     searchedJobs = data.jobs;
     renderSearchResults();
 
-    toast(`✅ Found ${data.jobs.length} jobs — scoring...`);
+    toast(`✅ Found ${data.jobs.length} jobs (last 7 days) — scoring...`);
 
     // Auto-score all results if resume is available
     if (resume) await scoreAllJobs();

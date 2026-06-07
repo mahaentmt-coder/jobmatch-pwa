@@ -20,7 +20,7 @@ class handler(BaseHTTPRequestHandler):
 
             title    = qs.get("title",    [""])[0].strip()
             location = qs.get("location", [""])[0].strip()
-            limit    = int(qs.get("limit", ["10"])[0])
+            limit    = int(qs.get("limit", ["50"])[0])
 
             if not title:
                 self._json({"error": "title parameter required"}, 400)
@@ -42,12 +42,11 @@ class handler(BaseHTTPRequestHandler):
                 queries.append(f"{title} in {location}")
 
             def fetch_query(query):
-                # Fetch 2 pages per query so after dedup we always hit the limit
                 params = urllib.parse.urlencode({
                     "query":            query,
                     "page":             "1",
-                    "num_pages":        "2",
-                    "date_posted":      "month",
+                    "num_pages":        "3",
+                    "date_posted":      "week",
                     "employment_types": "FULLTIME",
                 })
                 req = urllib.request.Request(
