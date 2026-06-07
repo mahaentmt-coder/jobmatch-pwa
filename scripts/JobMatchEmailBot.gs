@@ -25,7 +25,7 @@
 // CONFIG  — update RAPIDAPI_KEY with your key from rapidapi.com/developer/apps
 // ─────────────────────────────────────────────────────────────────────────────
 const CONFIG = {
-  RAPIDAPI_KEY : "YOUR_RAPIDAPI_KEY_HERE",   // ← paste your key here
+  SEARCH_URL   : "https://jobmatch-pwa.vercel.app/api/search",  // proxies JSearch via Vercel
   JOBMATCH_URL : "https://jobmatch-pwa.vercel.app/api/match",
   REPORT_TO    : "h.mirisaee@gmail.com",
   LABEL_DONE   : "jm-processed",
@@ -83,14 +83,13 @@ Executive Advisory, Portfolio Management, Change Management
 // ─────────────────────────────────────────────────────────────────────────────
 // SEARCH CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
-// Broad EMEA queries — 1 call per query instead of 1 per country.
-// JSearch aggregates global results; "EMEA" and "Europe" surface relevant roles.
+// Job titles sent to Vercel /api/search — Vercel calls JSearch from its own IP (no blocking)
 const SEARCH_QUERIES = [
-  "Digital Transformation Director EMEA",
-  "Programme Director Digital Transformation Europe",
-  "AI Transformation Director Middle East",
-  "IT Program Director Executive Europe",
-  "Strategy Director Digital Transformation EMEA",
+  "Digital Transformation Director",
+  "Programme Director Digital Transformation",
+  "AI Transformation Director",
+  "IT Program Director Executive",
+  "Strategy Director Digital",
 ];
 
 const JUNIOR_TITLE_SIGNALS = [
@@ -148,9 +147,8 @@ function checkNewJobAlerts() {
   // ── Step 4: Score each job
   const scored = [];
   for (const j of merged) {
-    const desc   = j.desc || fetchDescription_(j.title, j.company);
-    const result = desc
-      ? scoreJob_(j.title, j.company, desc)
+    const result = j.desc
+      ? scoreJob_(j.title, j.company, j.desc)
       : { score: null, rec: "Description not available", gaps: [], strengths: [] };
     scored.push({ ...j, desc: undefined, ...result });
     Logger.log(`  [${result.score ?? "N/A"}] ${j.title} @ ${j.company}`);
@@ -213,23 +211,20 @@ function extractJobsFromEmail_(text) {
 // PROACTIVE JSEARCH SWEEP  —  5 queries × 25 EMEA countries
 // ─────────────────────────────────────────────────────────────────────────────
 function searchJSearch_() {
-  // 5 broad EMEA queries — sequential, one call each = ~15s total, no rate limit issues
+  // Call Vercel /api/search instead of JSearch directly.
+  // Vercel proxies the JSearch request from its own IP — no GAS IP blocking.
   const results = [];
   const seen    = new Set();
 
-  Logger.log(`JSearch: running ${SEARCH_QUERIES.length} broad EMEA queries`);
+  Logger.log(`Search: calling Vercel proxy for ${SEARCH_QUERIES.length} queries`);
 
   for (const query of SEARCH_QUERIES) {
     try {
-      const url  = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query)}&page=1&num_pages=3&date_posted=week`;
+      const url  = `${CONFIG.SEARCH_URL}?title=${encodeURIComponent(query)}&limit=200`;
       const resp = UrlFetchApp.fetch(url, {
         method:             "get",
-        headers: {
-          "x-rapidapi-host": "jsearch.p.rapidapi.com",
-          "x-rapidapi-key":  CONFIG.RAPIDAPI_KEY,
-        },
         muteHttpExceptions: true,
-        deadline:           20,
+        deadline:           30,   // Vercel has 10s internally; 30s gives buffer for cold start
       });
 
       const code = resp.getResponseCode();
@@ -238,34 +233,32 @@ function searchJSearch_() {
         continue;
       }
 
-      const items = JSON.parse(resp.getContentText()).data || [];
-      let added = 0;
-      for (const item of items) {
-        if (seen.has(item.job_id)) continue;
-        seen.add(item.job_id);
-        if ((item.job_description || "").length < 200) continue;
-        const titleLower = (item.job_title || "").toLowerCase();
-        if (JUNIOR_TITLE_SIGNALS.some(s => titleLower.includes(s))) continue;
-        if (item.job_min_salary && (item.job_salary_period || "") === "YEAR" && parseFloat(item.job_min_salary) < 60000) continue;
+      const data = JSON.parse(resp.getContentText());
+      const jobs = data.jobs || [];
+      let added  = 0;
+
+      for (const j of jobs) {
+        if (!j.id || seen.has(j.id)) continue;
+        seen.add(j.id);
         results.push({
-          title:    item.job_title     || "",
-          company:  item.employer_name || "",
-          location: [item.job_city, item.job_country].filter(Boolean).join(", "),
-          desc:     item.job_description || "",
-          url:      item.job_apply_link || item.job_google_link || "",
-          salary:   extractSalary_(item.job_title, item.job_description),
+          title:    j.title    || "",
+          company:  j.company  || "",
+          location: j.location || "",
+          desc:     j.description || "",
+          url:      j.url      || "",
+          salary:   j.salary   || "",
         });
         added++;
       }
-      Logger.log(`  "${query}" → ${items.length} raw, +${added} kept (total ${results.length})`);
-      Utilities.sleep(1000); // 1s between calls — stays well within rate limits
+      Logger.log(`  "${query}" → +${added} jobs (total ${results.length})`);
+      Utilities.sleep(2000); // 2s between Vercel calls to avoid cold-start overlap
 
     } catch (e) {
       Logger.log(`  ERROR: ${query} — ${e}`);
     }
   }
 
-  Logger.log(`JSearch sweep complete: ${results.length} quality jobs`);
+  Logger.log(`Search complete: ${results.length} quality jobs`);
   return results;
 }
 
