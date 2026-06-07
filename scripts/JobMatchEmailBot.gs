@@ -230,40 +230,53 @@ function extractJobsFromEmail_(text) {
 // PROACTIVE JSEARCH SWEEP  —  5 queries × 25 EMEA countries
 // ─────────────────────────────────────────────────────────────────────────────
 function searchJSearch_() {
+  // Build all request objects up-front
+  const requests = [];
+  for (const query of SEARCH_QUERIES) {
+    for (const loc of EMEA_LOCATIONS) {
+      requests.push({
+        url:    `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query + " in " + loc)}&page=1&num_pages=2&date_posted=week`,
+        method: "get",
+        headers: {
+          "x-rapidapi-host": "jsearch.p.rapidapi.com",
+          "x-rapidapi-key":  CONFIG.RAPIDAPI_KEY,
+        },
+        muteHttpExceptions: true,
+        deadline:           15,
+        _label:             `${query} / ${loc}`,  // for logging (not sent to API)
+      });
+    }
+  }
+
+  Logger.log(`JSearch: firing ${requests.length} requests in parallel batches`);
+
+  // fetchAll in batches of 25 — parallel within each batch, brief pause between
+  const BATCH = 25;
   const results = [];
   const seen    = new Set();
-  let   callNum = 0;
 
-  for (const query of SEARCH_QUERIES) {
-    Logger.log(`  Query: "${query}" — searching ${EMEA_LOCATIONS.length} countries`);
-    for (const loc of EMEA_LOCATIONS) {
-      callNum++;
+  for (let i = 0; i < requests.length; i += BATCH) {
+    const batch     = requests.slice(i, i + BATCH);
+    const labels    = batch.map(r => r._label);
+    const apiBatch  = batch.map(({ _label, ...r }) => r); // strip _label before sending
+
+    Logger.log(`  Batch ${Math.floor(i / BATCH) + 1}: ${labels[0]} … ${labels[labels.length - 1]}`);
+
+    let responses;
+    try {
+      responses = UrlFetchApp.fetchAll(apiBatch);
+    } catch (e) {
+      Logger.log(`  Batch error: ${e}`);
+      continue;
+    }
+
+    for (let j = 0; j < responses.length; j++) {
       try {
-        const url  = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query + " in " + loc)}&page=1&num_pages=2&date_posted=week`;
-        const resp = UrlFetchApp.fetch(url, {
-          method:             "get",
-          headers: {
-            "x-rapidapi-host": "jsearch.p.rapidapi.com",
-            "x-rapidapi-key":  CONFIG.RAPIDAPI_KEY,
-          },
-          muteHttpExceptions: true,
-          deadline:           10,   // ← 10s hard timeout per call; prevents hangs
-        });
+        const code = responses[j].getResponseCode();
+        if (code === 429) { Logger.log(`  429 rate-limit: ${labels[j]}`); continue; }
+        if (code !== 200) { Logger.log(`  HTTP ${code}: ${labels[j]}`);   continue; }
 
-        const code = resp.getResponseCode();
-        if (code === 429) {
-          Logger.log(`  [${callNum}] Rate limited (429) — ${loc}, sleeping 5s`);
-          Utilities.sleep(5000);
-          continue;
-        }
-        if (code !== 200) {
-          Logger.log(`  [${callNum}] HTTP ${code} — ${loc}`);
-          continue;
-        }
-
-        const items = JSON.parse(resp.getContentText()).data || [];
-        let added = 0;
-        for (const item of items) {
+        for (const item of (JSON.parse(responses[j].getContentText()).data || [])) {
           if (seen.has(item.job_id)) continue;
           seen.add(item.job_id);
           if ((item.job_description || "").length < 200) continue;
@@ -278,18 +291,17 @@ function searchJSearch_() {
             url:      item.job_apply_link || item.job_google_link || "",
             salary:   extractSalary_(item.job_title, item.job_description),
           });
-          added++;
         }
-        if (added > 0) Logger.log(`  [${callNum}] ${loc} → +${added} jobs (total ${results.length})`);
-        Utilities.sleep(300);
-
       } catch (e) {
-        Logger.log(`  [${callNum}] ERROR ${loc}: ${e}`);
+        Logger.log(`  Parse error (${labels[j]}): ${e}`);
       }
     }
+
+    Logger.log(`  → Running total: ${results.length} jobs`);
+    if (i + BATCH < requests.length) Utilities.sleep(1000); // 1s between batches
   }
 
-  Logger.log(`JSearch sweep complete: ${results.length} quality jobs from ${callNum} calls`);
+  Logger.log(`JSearch sweep complete: ${results.length} quality jobs`);
   return results;
 }
 
