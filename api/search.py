@@ -136,13 +136,15 @@ class handler(BaseHTTPRequestHandler):
             else:
                 queries.append(f"{title} in {location}")
 
+            errors = []
+
             def fetch_query(query):
                 params = urllib.parse.urlencode({
-                    "query":            query,
-                    "page":             "1",
-                    "num_pages":        "2",   # 2 pages = up to 20 results per country
-                    "date_posted":      "month", # month >> week for senior roles
-                    "employment_types": "FULLTIME",
+                    "query":       query,
+                    "page":        "1",
+                    "num_pages":   "2",
+                    "date_posted": "month",
+                    # no employment_types filter — catches contract/temp Director roles too
                 })
                 req = urllib.request.Request(
                     f"{RAPIDAPI_URL}?{params}",
@@ -152,29 +154,27 @@ class handler(BaseHTTPRequestHandler):
                     },
                     method="GET"
                 )
-                for attempt in range(2):          # retry once on rate-limit
-                    try:
-                        with urllib.request.urlopen(req, timeout=5) as resp:
-                            return json.loads(resp.read()).get("data", [])
-                    except urllib.error.HTTPError as e:
-                        if e.code == 429:
-                            time.sleep(1)
-                            continue
-                        return []
-                    except Exception:
-                        return []
-                return []
+                try:
+                    with urllib.request.urlopen(req, timeout=9) as resp:
+                        data = json.loads(resp.read())
+                        return data.get("data", [])
+                except urllib.error.HTTPError as e:
+                    errors.append(f"HTTP {e.code} for: {query}")
+                    return []
+                except Exception as ex:
+                    errors.append(f"ERR {type(ex).__name__}: {query}")
+                    return []
 
-            # All countries in parallel — with max_workers=25 all fire simultaneously
-            # Each call takes ~1s so total wall-time ~2-3s, well within 10s Vercel limit
             all_items = []
             with ThreadPoolExecutor(max_workers=25) as pool:
                 futures = [pool.submit(fetch_query, q) for q in queries]
                 for result in as_completed(futures):
                     all_items.extend(result.result())
 
-            jobs = []
-            seen = set()
+            jobs        = []
+            seen        = set()
+            raw_count   = len(all_items)
+            skip_pub    = skip_jnr = skip_sal = skip_lang = skip_dup = 0
 
             for item in all_items:
                 if len(jobs) >= limit:
@@ -182,12 +182,12 @@ class handler(BaseHTTPRequestHandler):
 
                 job_id = item.get("job_id", "")
                 if job_id in seen:
-                    continue
+                    skip_dup += 1; continue
                 seen.add(job_id)
 
                 # Skip low-quality aggregator sources
                 if not is_trusted_publisher(item.get("job_publisher", "")):
-                    continue
+                    skip_pub += 1; continue
 
                 title_str   = item.get("job_title", "")
                 title_lower = title_str.lower()
@@ -206,17 +206,17 @@ class handler(BaseHTTPRequestHandler):
 
                 # Skip junior/entry-level roles — not relevant for Director+ search
                 if seniority == "Junior":
-                    continue
+                    skip_jnr += 1; continue
 
                 # Skip clearly junior salaries (annual < 60k in GBP/EUR/USD)
                 sal_min_check = item.get("job_min_salary")
                 sal_period    = item.get("job_salary_period", "").upper()
                 if sal_min_check and sal_period == "YEAR" and float(sal_min_check) < 60000:
-                    continue
+                    skip_sal += 1; continue
 
                 # Skip jobs that require a non-English language
                 if requires_non_english(item.get("job_description", "")):
-                    continue
+                    skip_lang += 1; continue
 
                 # Salary
                 sal_min  = item.get("job_min_salary")
@@ -256,7 +256,20 @@ class handler(BaseHTTPRequestHandler):
                     "publisher":     item.get("job_publisher", ""),
                 })
 
-            self._json({"jobs": jobs, "count": len(jobs)})
+            self._json({
+                "jobs":   jobs,
+                "count":  len(jobs),
+                "_debug": {
+                    "raw":       raw_count,
+                    "queries":   len(queries),
+                    "skip_dup":  skip_dup,
+                    "skip_pub":  skip_pub,
+                    "skip_jnr":  skip_jnr,
+                    "skip_sal":  skip_sal,
+                    "skip_lang": skip_lang,
+                    "errors":    errors,
+                }
+            })
 
         except Exception as e:
             self._json({"error": str(e)}, 500)
