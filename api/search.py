@@ -5,13 +5,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
 RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
 
-# Top 10 EMEA markets for the web app — keeps total JSearch calls to ~10
-# and fits comfortably within Vercel Hobby 10s timeout.
-# The email bot (Google Apps Script) uses all 25 countries with no timeout.
+# 5 highest-yield EMEA markets for the web app.
+# 5 countries x 1 JSearch call each = 5 parallel calls, completes in ~2s.
+# Fits safely within Vercel Hobby 10s hard timeout.
+# The email bot (Google Apps Script) searches all 25 with no timeout limit.
 EMEA_LOCATIONS = [
-    "UK", "Netherlands", "UAE", "Ireland",
-    "Germany", "Saudi Arabia", "Switzerland",
-    "Belgium", "Denmark", "Luxembourg",
+    "UK", "Netherlands", "UAE", "Ireland", "Germany",
 ]
 
 # Block known low-quality / spam aggregators only — everything else passes
@@ -141,8 +140,8 @@ class handler(BaseHTTPRequestHandler):
                 params = urllib.parse.urlencode({
                     "query":            query,
                     "page":             "1",
-                    "num_pages":        "1",   # 1 page = 10 results, fast (~1s per call)
-                    "date_posted":      "week",
+                    "num_pages":        "2",   # 2 pages = up to 20 results per country
+                    "date_posted":      "month", # month >> week for senior roles
                     "employment_types": "FULLTIME",
                 })
                 req = urllib.request.Request(
@@ -155,7 +154,7 @@ class handler(BaseHTTPRequestHandler):
                 )
                 for attempt in range(2):          # retry once on rate-limit
                     try:
-                        with urllib.request.urlopen(req, timeout=8) as resp:
+                        with urllib.request.urlopen(req, timeout=5) as resp:
                             return json.loads(resp.read()).get("data", [])
                     except urllib.error.HTTPError as e:
                         if e.code == 429:
