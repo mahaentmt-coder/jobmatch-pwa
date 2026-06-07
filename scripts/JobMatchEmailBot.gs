@@ -17,9 +17,12 @@
 const CONFIG = {
   RAPIDAPI_KEY:   "60f1ad8b3bmsh5c35504cc747bb6p14763cjsne1decca77a34",
   JOBMATCH_URL:   "https://jobmatch-pwa.vercel.app/api/match",
-  REPORT_TO:      "h.mirisaee@gmail.com",
-  MIN_SCORE:      60,          // only include jobs scoring >= this in report
-  LABEL_DONE:     "jm-processed",  // Gmail label to mark processed emails
+  REPORT_TO:      "h.mirisaee@gmail.com",   // report sent to your main inbox
+  MIN_SCORE:      60,
+  LABEL_DONE:     "jm-processed",
+  // This script runs on maha.jobmatch@gmail.com — a dedicated inbox that
+  // only receives forwarded LinkedIn job alert emails. No other emails exist
+  // here so no sender filter is needed; we just skip already-processed ones.
 };
 
 // Hadi's resume (kept in sync with the app)
@@ -66,11 +69,9 @@ Data Governance, ITIL, ISO 27001, Executive Advisory, Portfolio Management
 function checkNewJobAlerts() {
   ensureLabel_();
 
-  // Find unprocessed LinkedIn job alert emails
-  const threads = GmailApp.search(
-    `from:jobalerts-noreply@linkedin.com -label:${CONFIG.LABEL_DONE}`,
-    0, 20
-  );
+  // Find unprocessed emails — this inbox only receives LinkedIn job alerts
+  // forwarded from h.mirisaee@gmail.com, so no sender filter needed
+  const threads = GmailApp.search(`-label:${CONFIG.LABEL_DONE}`, 0, 20);
 
   if (!threads.length) {
     Logger.log("No new LinkedIn job alert emails.");
