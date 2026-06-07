@@ -392,15 +392,207 @@
 
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 0; }
+
+  /* ════════════════════════════════════════════
+     DESKTOP RESPONSIVE LAYOUT (≥900px)
+  ════════════════════════════════════════════ */
+  @media (min-width: 900px) {
+
+    body {
+      background: #060b18;
+      background-image: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.06) 0%, transparent 60%),
+                        radial-gradient(ellipse at 80% 20%, rgba(6,182,212,0.05) 0%, transparent 50%);
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── App shell ── */
+    .app-shell {
+      width: 100%;
+      max-width: 1280px;
+      height: 96vh;
+      display: flex;
+      flex-direction: row;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+    }
+    .sidebar-logo {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      padding: 0 20px 4px;
+    }
+    .sidebar-badge {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      padding: 0 20px;
+      margin-bottom: 28px;
+    }
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 0 12px;
+      flex: 1;
+    }
+    .sidebar-tab {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+      width: 100%;
+    }
+    .sidebar-tab:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+    .sidebar-tab.active { background: rgba(59,130,246,0.15); color: var(--primary); }
+    .sidebar-tab .tab-icon { font-size: 18px; flex-shrink: 0; }
+    .sidebar-footer {
+      padding: 16px 20px 0;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    /* ── Main content area ── */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    /* ── Desktop header (top bar inside main) ── */
+    .header { display: none; }
+    .desktop-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 32px 0;
+      flex-shrink: 0;
+    }
+    .desktop-topbar .section-heading { font-size: 24px; margin-bottom: 0; }
+    .desktop-topbar .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 0; }
+
+    /* ── Screens become scrollable panels ── */
+    .screen {
+      padding: 24px 32px;
+      padding-bottom: 32px;
+      max-width: 100%;
+    }
+    .screen.active { display: flex; flex-direction: column; }
+
+    /* Hide mobile bottom tabs */
+    .tabs { display: none; }
+
+    /* ── Two-column card grid on wide screens ── */
+    .desktop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .desktop-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    /* ── Wider cards ── */
+    .card { margin-bottom: 0; }
+
+    /* ── Search results: 2 cols ── */
+    #searchResults .job-card {
+      margin-top: 0;
+    }
+    #searchResultsGrid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    /* ── Toast position ── */
+    #toast { bottom: 32px; }
+
+    /* ── Scrollbar visible on desktop ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  }
+
+  @media (min-width: 900px) and (max-width: 1200px) {
+    .app-shell { max-width: 98vw; }
+    #searchResultsGrid { grid-template-columns: 1fr; }
+    .desktop-grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 
-<!-- Header -->
+<!-- Mobile Header -->
 <div class="header">
   <div class="header-logo">JobMatch AI</div>
   <div class="header-badge">POWERED BY CLAUDE</div>
 </div>
+
+<div class="app-shell">
+
+<!-- Sidebar (desktop only) -->
+<aside class="sidebar">
+  <div class="sidebar-logo">JobMatch AI</div>
+  <div class="sidebar-badge">POWERED BY CLAUDE</div>
+  <nav class="sidebar-nav">
+    <button class="sidebar-tab active" onclick="switchTab('resume',this)">
+      <span class="tab-icon">📄</span> Resume
+    </button>
+    <button class="sidebar-tab" onclick="switchTab('search',this)">
+      <span class="tab-icon">🔍</span> Job Search
+    </button>
+    <button class="sidebar-tab" onclick="switchTab('match',this)">
+      <span class="tab-icon">🎯</span> Match Score
+    </button>
+    <button class="sidebar-tab" onclick="switchTab('tailor',this)">
+      <span class="tab-icon">✨</span> Tailor CV
+    </button>
+    <button class="sidebar-tab" onclick="switchTab('track',this)">
+      <span class="tab-icon">📊</span> Applications
+    </button>
+  </nav>
+  <div class="sidebar-footer">JobMatch AI v1.0</div>
+</aside>
+
+<!-- Main content -->
+<div class="main-content">
 
 <!-- Screens -->
 
@@ -446,8 +638,8 @@
       </div>
     </div>
     <button class="btn btn-primary" id="searchBtn" onclick="searchLinkedIn()" style="margin-top:12px">🔍 Search All Queries</button>
-    <div id="searchResults"></div>
   </div>
+  <div id="searchResults"></div>
 
   <div class="card">
     <div class="card-title">Paste Job Description</div>
@@ -511,7 +703,7 @@
   <div id="trackList"></div>
 </div>
 
-<!-- Bottom tabs -->
+<!-- Bottom tabs (mobile only) -->
 <nav class="tabs">
   <button class="tab active" onclick="switchTab('resume',this)">
     <span class="tab-icon">📄</span>Resume
@@ -529,6 +721,9 @@
     <span class="tab-icon">📊</span>Track
   </button>
 </nav>
+
+</div><!-- /main-content -->
+</div><!-- /app-shell -->
 
 <div id="toast"></div>
 
@@ -552,9 +747,11 @@ let resume = localStorage.getItem('jm_resume') || '';
 // ── Tab switching ──────────────────────────────────────────────────────────
 function switchTab(name, el) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab, .sidebar-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
-  el.classList.add('active');
+  // Activate both the clicked element and its counterpart
+  document.querySelectorAll(`.tab[onclick*="'${name}'"], .sidebar-tab[onclick*="'${name}'"]`)
+    .forEach(t => t.classList.add('active'));
   if (name === 'match' || name === 'tailor') renderJobSelects();
   if (name === 'track') renderTracker();
 }
@@ -713,7 +910,7 @@ function renderSearchResults() {
     ? `<button id="scoreAllBtn" class="btn btn-primary" style="margin:10px 0 4px" onclick="scoreAllJobs()">🎯 Score All Against My Resume</button>`
     : '';
 
-  container.innerHTML = scoreAllBtn + searchedJobs.map((j, i) => {
+  const cardsHtml = searchedJobs.map((j, i) => {
     const meta = [j.company || 'Unknown', j.location || 'Location TBC', j.posted || ''].filter(Boolean).join(' · ');
     const pills = [
       j.seniority     ? `<span class="tag" style="background:rgba(99,102,241,0.15);color:#818cf8">${j.seniority}</span>` : '',
@@ -741,6 +938,9 @@ function renderSearchResults() {
       </div>
     </div>`;
   }).join('');
+
+  container.innerHTML = scoreAllBtn +
+    `<div id="searchResultsGrid">${cardsHtml}</div>`;
 }
 
 async function scoreJob(i) {
