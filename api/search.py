@@ -1,8 +1,11 @@
 from http.server import BaseHTTPRequestHandler
 import json, os, urllib.request, urllib.parse, urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-RAPIDAPI_HOST = "linkedin-jobs-search.p.rapidapi.com"
-RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/"
+RAPIDAPI_HOST = "jsearch.p.rapidapi.com"
+RAPIDAPI_URL  = f"https://{RAPIDAPI_HOST}/search"
+
+EMEA_LOCATIONS = ["UK", "UAE", "Germany", "Netherlands"]
 
 
 class handler(BaseHTTPRequestHandler):
@@ -28,53 +31,61 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "RAPIDAPI_KEY environment variable not set"}, 500)
                 return
 
-            # Build keyword query — handle OR syntax
-            # "Digital Transformation Director or Executive" → keywords as-is
-            keywords = title
+            loc_lower = location.lower()
+            is_emea   = not location or any(k in loc_lower for k in ["emea", "worldwide", "global", "remote"])
 
-            params = urllib.parse.urlencode({
-                "keywords":        keywords,
-                "location":        location or "Worldwide",
-                "dateSincePosted": "past month",
-                "jobType":         "full time",
-                "limit":           str(min(limit, 10)),
-                "offset":          "0",
-            })
-            url = f"{RAPIDAPI_URL}?{params}"
+            queries = []
+            if is_emea:
+                for country in EMEA_LOCATIONS:
+                    queries.append(f"{title} in {country}")
+            else:
+                queries.append(f"{title} in {location}")
 
-            req = urllib.request.Request(
-                url,
-                headers={
-                    "x-rapidapi-host": RAPIDAPI_HOST,
-                    "x-rapidapi-key":  api_key,
-                },
-                method="GET"
-            )
+            def fetch_query(query):
+                params = urllib.parse.urlencode({
+                    "query":            query,
+                    "page":             "1",
+                    "num_pages":        "1",
+                    "date_posted":      "month",
+                    "employment_types": "FULLTIME",
+                })
+                req = urllib.request.Request(
+                    f"{RAPIDAPI_URL}?{params}",
+                    headers={
+                        "x-rapidapi-host": RAPIDAPI_HOST,
+                        "x-rapidapi-key":  api_key,
+                    },
+                    method="GET"
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=20) as resp:
+                        return json.loads(resp.read()).get("data", [])
+                except Exception:
+                    return []
 
-            try:
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    raw = json.loads(resp.read())
-            except urllib.error.HTTPError as e:
-                body = e.read().decode("utf-8", errors="replace")
-                self._json({"error": f"LinkedIn API {e.code}: {body[:300]}"}, 502)
-                return
-
-            # Normalise response — returns a list directly
-            items = raw if isinstance(raw, list) else raw.get("data", raw.get("jobs", []))
+            # Fetch all queries in parallel
+            all_items = []
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                for result in as_completed([pool.submit(fetch_query, q) for q in queries]):
+                    all_items.extend(result.result())
 
             jobs = []
-            for item in items:
-                title_str   = item.get("position", item.get("title", ""))
+            seen = set()
+
+            for item in all_items:
+                if len(jobs) >= limit:
+                    break
+
+                job_id = item.get("job_id", "")
+                if job_id in seen:
+                    continue
+                seen.add(job_id)
+
+                title_str   = item.get("job_title", "")
                 title_lower = title_str.lower()
-                company     = item.get("company",  item.get("companyName", ""))
-                location_str = item.get("location", item.get("jobLocation", ""))
-                url_str      = item.get("jobUrl",  item.get("url", item.get("applyUrl", "")))
-                posted       = item.get("postedAt", item.get("date", item.get("publishedAt", "")))
-                description  = item.get("description", item.get("jobDescription", ""))
-                salary_str   = item.get("salary", item.get("salaryRange", ""))
 
                 # Infer seniority from title
-                if any(w in title_lower for w in ["chief", "cto", "cio", "cdo", "cxo", "vp", "vice president", "c-suite"]):
+                if any(w in title_lower for w in ["chief", "cto", "cio", "cdo", "vp", "vice president"]):
                     seniority = "Executive"
                 elif any(w in title_lower for w in ["director", "head of", "principal"]):
                     seniority = "Director"
@@ -85,18 +96,38 @@ class handler(BaseHTTPRequestHandler):
                 else:
                     seniority = "Mid"
 
+                # Salary
+                sal_min = item.get("job_min_salary")
+                sal_max = item.get("job_max_salary")
+                period  = item.get("job_salary_period", "")
+                if sal_min and sal_max:
+                    salary = f"{int(sal_min):,} – {int(sal_max):,}"
+                    if period:
+                        salary += f" / {period.lower()}"
+                elif sal_min:
+                    salary = f"{int(sal_min):,}+" + (f" / {period.lower()}" if period else "")
+                else:
+                    salary = ""
+
+                city    = item.get("job_city", "") or ""
+                country = item.get("job_country", "") or ""
+                loc_str = ", ".join(filter(None, [city, country]))
+
                 jobs.append({
-                    "id":            item.get("id", item.get("jobId", str(len(jobs)))),
+                    "id":            job_id,
                     "title":         title_str,
-                    "company":       company,
-                    "location":      location_str,
-                    "description":   description,
-                    "url":           url_str,
-                    "posted":        str(posted)[:10] if posted else "",
-                    "salary":        str(salary_str) if salary_str else "",
+                    "company":       item.get("employer_name", ""),
+                    "logo":          item.get("employer_logo", ""),
+                    "location":      loc_str,
+                    "description":   item.get("job_description", ""),
+                    "url":           item.get("job_apply_link", item.get("job_google_link", "")),
+                    "posted":        item.get("job_posted_at", ""),
+                    "salary":        salary,
                     "seniority":     seniority,
-                    "contract_type": item.get("employmentType", item.get("jobType", "")),
-                    "contract_time": "",
+                    "contract_type": item.get("job_employment_type", ""),
+                    "remote":        item.get("job_is_remote", False),
+                    "benefits":      (item.get("job_benefits_strings") or [])[:3],
+                    "publisher":     item.get("job_publisher", ""),
                 })
 
             self._json({"jobs": jobs, "count": len(jobs)})
