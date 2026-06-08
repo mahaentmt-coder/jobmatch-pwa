@@ -1743,95 +1743,76 @@ function renderCVPDF(d) {
 
   // Cover letter paragraphs
   const clParas = (d.cover_letter || '').split(/\n+/).filter(p => p.trim())
-    .map(p => `<p style="margin:0 0 14px">${p.trim()}</p>`).join('');
+    .map(p => `<p style="margin:0 0 16px;line-height:1.75">${p.trim()}</p>`).join('');
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>${d.name} — Application for ${d.job_title} @ ${d.company}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Arial', sans-serif; color: #1a1a1a; font-size: 13px; line-height: 1.55; margin: 0; padding: 0; }
-  .page { max-width: 820px; margin: 0 auto; padding: 36px 44px; }
-  .page-break { page-break-before: always; }
-  h1  { font-size: 28px; font-weight: 700; margin: 0 0 3px; color: #0f172a; letter-spacing: -0.5px; }
-  .headline { color: #2563eb; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-  .contact  { font-size: 11.5px; color: #555; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2px solid #2563eb; }
-  h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
-       color: #2563eb; border-bottom: 1px solid #dbeafe; padding-bottom: 3px; margin: 16px 0 8px; }
-  .role-title { font-weight: 700; font-size: 13px; margin-bottom: 1px; }
-  .role-meta  { font-size: 11px; color: #555; margin-bottom: 5px; }
-  .role { margin-bottom: 13px; }
-  ul { margin: 0; padding-left: 16px; }
-  li { margin-bottom: 3px; }
-  /* Cover letter page */
-  .cl-header { border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 24px; }
-  .cl-body   { font-size: 13.5px; line-height: 1.7; color: #1a1a1a; }
-  .cl-sign   { margin-top: 28px; }
-  @page { margin: 14mm 16mm; }
-  @media print { body { padding: 0; } .page { padding: 0; } }
-</style>
-</head>
-<body>
+  const sharedStyle = `
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; color: #1a1a1a; font-size: 13px; line-height: 1.55; margin: 0; }
+    .page { max-width: 820px; margin: 0 auto; padding: 36px 44px; }
+    h1 { font-size: 26px; font-weight: 700; margin: 0 0 3px; color: #0f172a; }
+    .headline { color: #2563eb; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .contact  { font-size: 11.5px; color: #555; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2.5px solid #2563eb; }
+    h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
+         color: #2563eb; border-bottom: 1px solid #dbeafe; padding-bottom: 3px; margin: 16px 0 8px; }
+    .role-title { font-weight: 700; font-size: 13px; margin-bottom: 1px; }
+    .role-meta  { font-size: 11px; color: #555; margin-bottom: 5px; }
+    .role { margin-bottom: 13px; }
+    ul { margin: 0; padding-left: 16px; }
+    li { margin-bottom: 3px; }
+    @page { margin: 14mm 16mm; }
+    @media print { body { padding: 0; } .page { padding: 0; } }`;
 
-<!-- ═══ PAGE 1: TAILORED CV ═══ -->
+  // ── CV HTML ──
+  const cvHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>CV — ${d.name} — ${d.job_title} @ ${d.company}</title>
+<style>${sharedStyle}</style></head><body>
 <div class="page">
   <h1>${d.name}</h1>
   <div class="headline">${d.headline || ''}</div>
   <div class="contact">${d.contact}</div>
-
   <h2>Professional Summary</h2>
   <p style="margin:0 0 4px">${d.summary || ''}</p>
-
-  <h2>Experience</h2>
-  ${expHtml}
-
-  <h2>Education</h2>
-  ${eduHtml}
-
-  <h2>Certifications</h2>
-  ${certHtml}
-
-  <h2>Core Skills</h2>
-  ${skillsHtml}
+  <h2>Experience</h2>${expHtml}
+  <h2>Education</h2>${eduHtml}
+  <h2>Certifications</h2>${certHtml}
+  <h2>Core Skills</h2>${skillsHtml}
 </div>
-
-<!-- ═══ PAGE 2: COVER LETTER ═══ -->
-<div class="page page-break">
-  <div class="cl-header">
-    <h1>${d.name}</h1>
-    <div class="contact" style="border:none;margin:0;padding:0">${d.contact}</div>
-  </div>
-
-  <div style="margin-bottom:18px">
-    <div style="font-weight:700;font-size:14px;color:#0f172a">${d.job_title}</div>
-    <div style="font-size:12px;color:#555">${d.company}</div>
-  </div>
-
-  <div class="cl-body">
-    ${clParas || '<p>Cover letter not available.</p>'}
-  </div>
-
-  <div class="cl-sign">
-    <div style="margin-bottom:28px;font-size:13px">Yours sincerely,</div>
-    <div style="font-weight:700;font-size:14px">${d.name}</div>
-    <div style="font-size:12px;color:#555">${d.contact}</div>
-  </div>
-</div>
-
 <script>window.onload = () => window.print();<\/script>
-</body>
-</html>`;
+</body></html>`;
 
-  const blob = new Blob([html], { type: 'text/html' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 15000);
+  // ── Cover Letter HTML ──
+  const clHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Cover Letter — ${d.name} — ${d.job_title} @ ${d.company}</title>
+<style>${sharedStyle}</style></head><body>
+<div class="page">
+  <h1>${d.name}</h1>
+  <div class="contact">${d.contact}</div>
+  <div style="font-weight:700;font-size:14px;color:#0f172a;margin-bottom:2px">${d.job_title}</div>
+  <div style="font-size:12px;color:#555;margin-bottom:24px">${d.company}</div>
+  <div style="font-size:13.5px">${clParas || '<p>Cover letter not generated.</p>'}</div>
+  <div style="margin-top:36px">
+    <div style="color:#555;font-size:13px;margin-bottom:24px">Yours sincerely,</div>
+    <div style="font-weight:700;font-size:15px">${d.name}</div>
+    <div style="font-size:12px;color:#555;margin-top:2px">${d.contact}</div>
+  </div>
+</div>
+<script>window.onload = () => window.print();<\/script>
+</body></html>`;
+
+  // Open CV first, then cover letter after a short delay (avoid popup blocker)
+  function openBlob(html) {
+    const blob = new Blob([html], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+  }
+
+  openBlob(cvHtml);
+  setTimeout(() => openBlob(clHtml), 800); // slight delay so CV tab opens first
 }
 
 // ── PDF Export ─────────────────────────────────────────────────────────────
