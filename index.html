@@ -1193,7 +1193,7 @@ function renderSearchResults() {
       </div>
       <div id="tailor-result-${i}"></div>
       <div class="job-card-actions">
-        <button class="btn btn-secondary btn-sm" onclick="scoreJob(${i})">🎯 Score</button>
+        <button class="btn btn-secondary btn-sm" onclick="showScoreDetails(${i})">🎯 Score</button>
         <button class="btn btn-gold btn-sm" onclick="tailorJob(${i})">✨ Tailor</button>
         <button class="btn btn-primary btn-sm" onclick="importLinkedInJob(${i})">➕ Save</button>
         ${j.url ? `<a href="${j.url}" target="_blank" style="text-decoration:none"><button class="btn btn-secondary btn-sm">🔗 Apply</button></a>` : ''}
@@ -1253,7 +1253,7 @@ function renderSearchResults() {
         const actions = card.querySelector('.job-card-actions');
         const b = document.createElement('button');
         b.className = 'btn btn-success btn-sm gen-cv-btn';
-        b.innerHTML = '📋 Apply';
+        b.innerHTML = '📋 Generate';
         b.onclick = () => generateCV(i);
         actions.prepend(b);
       }
@@ -1367,7 +1367,7 @@ async function scoreAllJobs() {
         const actions = card.querySelector('.job-card-actions');
         const b = document.createElement('button');
         b.className = 'btn btn-success btn-sm gen-cv-btn';
-        b.innerHTML = '📋 Apply';
+        b.innerHTML = '📋 Generate';
         b.onclick = () => generateCV(i);
         actions.prepend(b);
       }

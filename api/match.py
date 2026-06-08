@@ -35,17 +35,19 @@ COMPANY: {company}
 JOB DESCRIPTION (first 2500 chars):
 {job_description[:2500]}
 
-Respond ONLY with a valid JSON object (no markdown, no preamble, no backticks):
+Respond ONLY with a valid JSON object (no markdown, no preamble, no backticks).
+ALL array fields MUST contain real values — never return empty arrays.
+
 {{
   "match_score": <integer 0-100>,
-  "matched_keywords": ["kw1","kw2","kw3","kw4","kw5"],
-  "missing_keywords": ["kw1","kw2","kw3","kw4"],
-  "strengths": ["strength1","strength2","strength3"],
-  "gaps": ["gap1","gap2"],
-  "recommendation": "Apply now|Apply with tailoring|Skip"
+  "matched_keywords": ["<5-7 specific skills/keywords from the JD that ARE in the resume>"],
+  "missing_keywords": ["<4-6 specific skills/keywords from the JD that are NOT in the resume>"],
+  "strengths": ["<3-4 specific strengths Hadi brings that directly match this role>"],
+  "gaps": ["<2-4 specific gaps or areas where Hadi's profile falls short for this role>"],
+  "recommendation": "<one of: Apply now | Apply with tailoring | Skip>"
 }}"""
 
-            result = self._call_claude(prompt, max_tokens=800)
+            result = self._call_claude(prompt, max_tokens=1200)
             data = json.loads(self._extract_json(result))
             data["job_id"] = job_id
             data["job_title"] = job_title
