@@ -730,7 +730,7 @@
           <button onclick="selectLocGroup('all')"    style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">All EMEA</button>
           <button onclick="selectLocGroup('none')"   style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">Clear</button>
           <button onclick="selectLocGroup('europe')" style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">Europe only</button>
-          <button onclick="selectLocGroup('gulf')"   style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">Gulf only</button>
+          <button onclick="selectLocGroup('gulf')"   style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">Persian Gulf only</button>
         </div>
 
         <div id="locOptions"></div>
@@ -982,7 +982,7 @@ function initLocDropdown() {
   const container = document.getElementById('locOptions');
   const groups = [
     { label: '🇪🇺 Europe', countries: LOC_GROUPS.europe },
-    { label: '🌙 Gulf & Middle East', countries: LOC_GROUPS.gulf },
+    { label: '🌙 Persian Gulf & Middle East', countries: LOC_GROUPS.gulf },
     { label: '🌍 Africa', countries: LOC_GROUPS.africa },
   ];
   container.innerHTML = groups.map(g => `
