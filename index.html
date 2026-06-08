@@ -1837,104 +1837,131 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// ── Service Worker ─────────────────────────────────────────────────────────
+// ── Service Worker ──────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(console.error);
 }
 
 // ── Score Details Modal ─────────────────────────────────────────────────────
+// Static modal — no inline onclick in dynamic HTML (avoids CSP issues)
+let _modalJobIndex = null;
+
 function showScoreDetails(i) {
   const j = searchedJobs[i];
   if (!j) return;
   if (j._score == null) {
-    // Not yet scored — trigger scoring, then re-open modal when done
-    toast('⏳ Scoring now — click again in a moment');
-    scoreJob(i).then(() => { if (searchedJobs[i]._score != null) showScoreDetails(i); });
+    toast('⏳ Scoring now — modal will open when done');
+    scoreJob(i).then(() => { if (searchedJobs[i] && searchedJobs[i]._score != null) showScoreDetails(i); });
     return;
   }
+  _modalJobIndex = i;
 
-  const score     = j._score;
-  const color     = score >= 75 ? '#10b981' : score >= 55 ? '#f59e0b' : '#ef4444';
-  const verdict   = score >= 85 ? '🔥 Excellent — apply now'
-                  : score >= 75 ? '✅ Strong match — tailor & apply'
-                  : score >= 55 ? '🟡 Decent fit — tailor carefully'
-                                : '❌ Weak match — skip';
+  const score   = j._score;
+  const color   = score >= 75 ? '#10b981' : score >= 55 ? '#f59e0b' : '#ef4444';
+  const verdict = score >= 85 ? '🔥 Excellent — apply now'
+                : score >= 75 ? '✅ Strong match — tailor & apply'
+                : score >= 55 ? '🟡 Decent fit — tailor carefully'
+                              : '❌ Weak match — skip';
 
-  const tags = (arr, bg, clr) => (arr||[]).map(t =>
-    `<span style="display:inline-block;background:${bg};color:${clr};font-size:12px;padding:3px 10px;border-radius:6px;margin:3px 3px 0 0;border:1px solid ${clr}30">${t}</span>`
-  ).join('') || '<span style="color:#475569;font-size:12px">None</span>';
+  const tags = (arr, bg, clr) => (arr||[]).length
+    ? (arr).map(t => `<span style="display:inline-block;background:${bg};color:${clr};font-size:12px;padding:3px 10px;border-radius:6px;margin:3px 3px 0 0;border:1px solid ${clr}30">${t}</span>`).join('')
+    : '<span style="color:#475569;font-size:12px">None identified</span>';
 
-  const html = `
-  <div id="scoreModal" onclick="if(event.target===this)closeScoreModal()" style="
-    position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;
-    display:flex;align-items:center;justify-content:center;padding:16px">
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:16px;
-      max-width:560px;width:100%;max-height:88vh;overflow-y:auto;padding:28px;position:relative">
+  // Populate static modal fields
+  document.getElementById('sm-title').textContent    = j.title;
+  document.getElementById('sm-meta').textContent     = [j.company, j.location].filter(Boolean).join(' · ');
+  document.getElementById('sm-score').textContent    = score;
+  document.getElementById('sm-score').style.color    = color;
+  document.getElementById('sm-ring').style.borderColor  = color;
+  document.getElementById('sm-ring').style.background   = color + '18';
+  document.getElementById('sm-verdict').textContent  = verdict;
+  document.getElementById('sm-rec').textContent      = j._rec || '';
+  document.getElementById('sm-matched').innerHTML    = tags(j._matched  ||[], 'rgba(16,185,129,0.1)', '#10b981');
+  document.getElementById('sm-missing').innerHTML    = tags(j._missing  ||[], 'rgba(239,68,68,0.1)',  '#ef4444');
+  document.getElementById('sm-strengths').innerHTML  = tags(j._strengths||[], 'rgba(59,130,246,0.1)', '#60a5fa');
+  document.getElementById('sm-gaps').innerHTML       = tags(j._gaps     ||[], 'rgba(245,158,11,0.1)', '#f59e0b');
 
-      <!-- Close -->
-      <button onclick="closeScoreModal()" style="position:absolute;top:14px;right:16px;
-        background:none;border:none;color:#64748b;font-size:22px;cursor:pointer;line-height:1">×</button>
+  const applyBtn = document.getElementById('sm-apply');
+  if (j.url) { applyBtn.href = j.url; applyBtn.style.display = 'flex'; }
+  else        { applyBtn.style.display = 'none'; }
 
-      <!-- Job title -->
-      <div style="font-size:11px;color:#475569;letter-spacing:1px;margin-bottom:6px">MATCH ANALYSIS</div>
-      <div style="font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:2px">${j.title}</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:20px">${j.company || ''}${j.location ? ' · '+j.location : ''}</div>
-
-      <!-- Score ring + verdict -->
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
-        <div style="width:72px;height:72px;border-radius:50%;border:3px solid ${color};
-          background:${color}18;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <span style="font-size:26px;font-weight:800;color:${color};font-family:monospace">${score}</span>
-        </div>
-        <div>
-          <div style="font-size:15px;font-weight:600;color:#f1f5f9;margin-bottom:4px">${verdict}</div>
-          <div style="font-size:12px;color:#94a3b8;line-height:1.5">${j._rec || ''}</div>
-        </div>
-      </div>
-
-      <!-- Matched keywords -->
-      <div style="margin-bottom:16px">
-        <div style="font-size:11px;font-weight:700;color:#10b981;letter-spacing:1px;margin-bottom:8px">✅ MATCHED KEYWORDS</div>
-        ${tags(j._matched, 'rgba(16,185,129,0.1)', '#10b981')}
-      </div>
-
-      <!-- Missing keywords -->
-      <div style="margin-bottom:16px">
-        <div style="font-size:11px;font-weight:700;color:#ef4444;letter-spacing:1px;margin-bottom:8px">❌ MISSING KEYWORDS</div>
-        ${tags(j._missing, 'rgba(239,68,68,0.1)', '#ef4444')}
-      </div>
-
-      <!-- Strengths -->
-      <div style="margin-bottom:16px">
-        <div style="font-size:11px;font-weight:700;color:#3b82f6;letter-spacing:1px;margin-bottom:8px">💪 YOUR STRENGTHS FOR THIS ROLE</div>
-        ${tags(j._strengths, 'rgba(59,130,246,0.1)', '#60a5fa')}
-      </div>
-
-      <!-- Gaps -->
-      <div style="margin-bottom:22px">
-        <div style="font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:1px;margin-bottom:8px">⚠️ GAPS TO ADDRESS</div>
-        ${tags(j._gaps, 'rgba(245,158,11,0.1)', '#f59e0b')}
-      </div>
-
-      <!-- Action buttons -->
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        ${j.url ? `<a href="${j.url}" target="_blank" style="flex:1;min-width:120px;text-align:center;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px">🔗 Apply Now</a>` : ''}
-        <button onclick="closeScoreModal();tailorJob(${i})" style="flex:1;min-width:120px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">✍️ Tailor CV</button>
-        <button onclick="closeScoreModal()" style="background:rgba(255,255,255,0.05);color:#64748b;border:1px solid #1e3a5f;padding:10px 16px;border-radius:8px;font-size:13px;cursor:pointer">Close</button>
-      </div>
-    </div>
-  </div>`;
-
-  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('scoreModal').style.display = 'flex';
 }
 
 function closeScoreModal() {
-  const m = document.getElementById('scoreModal');
-  if (m) m.remove();
+  document.getElementById('scoreModal').style.display = 'none';
 }
 
-// Close modal on Escape key
+document.addEventListener('DOMContentLoaded', () => {
+  // Wire up static modal buttons
+  document.getElementById('sm-close').addEventListener('click',  closeScoreModal);
+  document.getElementById('sm-close2').addEventListener('click', closeScoreModal);
+  document.getElementById('sm-tailor').addEventListener('click', () => {
+    closeScoreModal();
+    if (_modalJobIndex !== null) tailorJob(_modalJobIndex);
+  });
+  document.getElementById('scoreModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('scoreModal')) closeScoreModal();
+  });
+});
+
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeScoreModal(); });
 </script>
+
+<!-- ── Score Details Modal (static — no dynamic onclick) ──────────────────── -->
+<div id="scoreModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);
+  z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:16px;
+    max-width:560px;width:100%;max-height:88vh;overflow-y:auto;padding:28px;position:relative">
+
+    <button id="sm-close" style="position:absolute;top:14px;right:16px;background:none;
+      border:none;color:#64748b;font-size:24px;cursor:pointer;line-height:1;padding:0">×</button>
+
+    <div style="font-size:10px;color:#475569;letter-spacing:1.5px;margin-bottom:6px;font-weight:700">MATCH ANALYSIS</div>
+    <div id="sm-title" style="font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:3px;line-height:1.3"></div>
+    <div id="sm-meta"  style="font-size:12px;color:#64748b;margin-bottom:20px"></div>
+
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
+      <div id="sm-ring" style="width:72px;height:72px;border-radius:50%;border:3px solid #10b981;
+        background:#10b98118;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <span id="sm-score" style="font-size:26px;font-weight:800;font-family:monospace"></span>
+      </div>
+      <div>
+        <div id="sm-verdict" style="font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:4px"></div>
+        <div id="sm-rec"     style="font-size:12px;color:#94a3b8;line-height:1.5"></div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;color:#10b981;letter-spacing:1px;margin-bottom:7px">✅ MATCHED KEYWORDS</div>
+      <div id="sm-matched"></div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;color:#ef4444;letter-spacing:1px;margin-bottom:7px">❌ MISSING KEYWORDS</div>
+      <div id="sm-missing"></div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;color:#60a5fa;letter-spacing:1px;margin-bottom:7px">💪 YOUR STRENGTHS</div>
+      <div id="sm-strengths"></div>
+    </div>
+    <div style="margin-bottom:22px">
+      <div style="font-size:10px;font-weight:700;color:#f59e0b;letter-spacing:1px;margin-bottom:7px">⚠️ GAPS TO ADDRESS</div>
+      <div id="sm-gaps"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a id="sm-apply" href="#" target="_blank" rel="noopener" style="flex:1;min-width:120px;
+        text-align:center;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;
+        text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px;
+        display:flex;align-items:center;justify-content:center">🔗 Apply Now</a>
+      <button id="sm-tailor" style="flex:1;min-width:120px;background:rgba(139,92,246,0.15);
+        color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:10px 16px;
+        border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">✍️ Tailor CV</button>
+      <button id="sm-close2" style="background:rgba(255,255,255,0.05);color:#64748b;
+        border:1px solid #1e3a5f;padding:10px 16px;border-radius:8px;font-size:13px;cursor:pointer">Close</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
