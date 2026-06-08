@@ -1128,6 +1128,9 @@ function _paintBadge(i, score, rec) {
   const color   = score >= 75 ? 'var(--success)' : score >= 55 ? 'var(--gold)' : 'var(--danger)';
   const ringCls = score >= 75 ? 'ring-high' : score >= 55 ? 'ring-mid' : 'ring-low';
   badge.className = `score-badge-ring ${ringCls}`;
+  badge.style.cursor = 'pointer';
+  badge.title = 'Click for match details';
+  badge.onclick = () => showScoreDetails(i);
   badge.innerHTML = `
     <div style="font-family:var(--mono);font-size:17px;font-weight:600;color:${color};line-height:1">${score}</div>
     <div style="font-size:8px;color:var(--muted);margin-top:2px;text-align:center;line-height:1.2">${(rec||'').split(' ')[0]}</div>`;
@@ -1157,8 +1160,12 @@ async function scoreJob(i) {
     if (d.error) throw new Error(d.error);
     const score = d.match_score || 0;
     const rec   = d.recommendation || '';
-    searchedJobs[i]._score = score;
-    searchedJobs[i]._rec   = rec;
+    searchedJobs[i]._score    = score;
+    searchedJobs[i]._rec      = rec;
+    searchedJobs[i]._matched  = d.matched_keywords  || [];
+    searchedJobs[i]._missing  = d.missing_keywords  || [];
+    searchedJobs[i]._strengths= d.strengths         || [];
+    searchedJobs[i]._gaps     = d.gaps              || [];
     _paintBadge(i, score, rec);
 
     // Update card border class
@@ -1690,7 +1697,94 @@ function toast(msg) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(console.error);
 }
+
+// ── Score Details Modal ─────────────────────────────────────────────────────
+function showScoreDetails(i) {
+  const j = searchedJobs[i];
+  if (!j || j._score == null) { toast('⚠️ Score this job first'); return; }
+
+  const score     = j._score;
+  const color     = score >= 75 ? '#10b981' : score >= 55 ? '#f59e0b' : '#ef4444';
+  const verdict   = score >= 85 ? '🔥 Excellent — apply now'
+                  : score >= 75 ? '✅ Strong match — tailor & apply'
+                  : score >= 55 ? '🟡 Decent fit — tailor carefully'
+                                : '❌ Weak match — skip';
+
+  const tags = (arr, bg, clr) => (arr||[]).map(t =>
+    `<span style="display:inline-block;background:${bg};color:${clr};font-size:12px;padding:3px 10px;border-radius:6px;margin:3px 3px 0 0;border:1px solid ${clr}30">${t}</span>`
+  ).join('') || '<span style="color:#475569;font-size:12px">None</span>';
+
+  const html = `
+  <div id="scoreModal" onclick="if(event.target===this)closeScoreModal()" style="
+    position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:16px;
+      max-width:560px;width:100%;max-height:88vh;overflow-y:auto;padding:28px;position:relative">
+
+      <!-- Close -->
+      <button onclick="closeScoreModal()" style="position:absolute;top:14px;right:16px;
+        background:none;border:none;color:#64748b;font-size:22px;cursor:pointer;line-height:1">×</button>
+
+      <!-- Job title -->
+      <div style="font-size:11px;color:#475569;letter-spacing:1px;margin-bottom:6px">MATCH ANALYSIS</div>
+      <div style="font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:2px">${j.title}</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:20px">${j.company || ''}${j.location ? ' · '+j.location : ''}</div>
+
+      <!-- Score ring + verdict -->
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
+        <div style="width:72px;height:72px;border-radius:50%;border:3px solid ${color};
+          background:${color}18;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <span style="font-size:26px;font-weight:800;color:${color};font-family:monospace">${score}</span>
+        </div>
+        <div>
+          <div style="font-size:15px;font-weight:600;color:#f1f5f9;margin-bottom:4px">${verdict}</div>
+          <div style="font-size:12px;color:#94a3b8;line-height:1.5">${j._rec || ''}</div>
+        </div>
+      </div>
+
+      <!-- Matched keywords -->
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:#10b981;letter-spacing:1px;margin-bottom:8px">✅ MATCHED KEYWORDS</div>
+        ${tags(j._matched, 'rgba(16,185,129,0.1)', '#10b981')}
+      </div>
+
+      <!-- Missing keywords -->
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:#ef4444;letter-spacing:1px;margin-bottom:8px">❌ MISSING KEYWORDS</div>
+        ${tags(j._missing, 'rgba(239,68,68,0.1)', '#ef4444')}
+      </div>
+
+      <!-- Strengths -->
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:#3b82f6;letter-spacing:1px;margin-bottom:8px">💪 YOUR STRENGTHS FOR THIS ROLE</div>
+        ${tags(j._strengths, 'rgba(59,130,246,0.1)', '#60a5fa')}
+      </div>
+
+      <!-- Gaps -->
+      <div style="margin-bottom:22px">
+        <div style="font-size:11px;font-weight:700;color:#f59e0b;letter-spacing:1px;margin-bottom:8px">⚠️ GAPS TO ADDRESS</div>
+        ${tags(j._gaps, 'rgba(245,158,11,0.1)', '#f59e0b')}
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${j.url ? `<a href="${j.url}" target="_blank" style="flex:1;min-width:120px;text-align:center;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px">🔗 Apply Now</a>` : ''}
+        <button onclick="closeScoreModal();tailorJob(${i})" style="flex:1;min-width:120px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">✍️ Tailor CV</button>
+        <button onclick="closeScoreModal()" style="background:rgba(255,255,255,0.05);color:#64748b;border:1px solid #1e3a5f;padding:10px 16px;border-radius:8px;font-size:13px;cursor:pointer">Close</button>
+      </div>
+    </div>
+  </div>`;
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeScoreModal() {
+  const m = document.getElementById('scoreModal');
+  if (m) m.remove();
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeScoreModal(); });
 </script>
-TEST
 </body>
 </html>
