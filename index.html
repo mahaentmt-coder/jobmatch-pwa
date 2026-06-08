@@ -704,8 +704,41 @@
 
   <div class="card">
     <div class="card-title">🔍 Search LinkedIn Jobs</div>
-    <label>Location</label>
-    <input type="text" id="searchLocation" placeholder="Empty = EMEA core (UK, NL, UAE, IE, DE) — or type a country" value="">
+    <label>Location <span id="locLabel" style="color:#60a5fa;font-weight:600;font-size:11px;margin-left:6px">— EMEA (all 25 countries)</span></label>
+
+    <!-- Custom multi-select dropdown -->
+    <div style="position:relative" id="locWrapper">
+      <div id="locTrigger" onclick="toggleLocDropdown()" style="
+        background:#1e293b;border:1px solid #334155;border-radius:8px;padding:9px 36px 9px 12px;
+        cursor:pointer;font-size:13px;color:#94a3b8;position:relative;user-select:none;min-height:38px">
+        <span id="locPlaceholder">🌍 All EMEA — 25 countries</span>
+        <div id="locTags" style="display:none;flex-wrap:wrap;gap:4px"></div>
+        <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#475569;font-size:16px" id="locArrow">▾</span>
+      </div>
+
+      <div id="locDropdown" style="display:none;position:absolute;z-index:200;top:calc(100% + 4px);left:0;right:0;
+        background:#0f172a;border:1px solid #334155;border-radius:10px;padding:10px;
+        box-shadow:0 8px 32px rgba(0,0,0,0.5);max-height:320px;overflow-y:auto">
+
+        <!-- Search filter -->
+        <input id="locSearch" type="text" placeholder="Filter countries…" oninput="filterLocOptions(this.value)"
+          style="width:100%;box-sizing:border-box;background:#1e293b;border:1px solid #334155;border-radius:6px;
+          padding:7px 10px;color:#e2e8f0;font-size:12px;margin-bottom:8px">
+
+        <!-- Quick selects -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button onclick="selectLocGroup('all')"    style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">All EMEA</button>
+          <button onclick="selectLocGroup('none')"   style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">Clear</button>
+          <button onclick="selectLocGroup('europe')" style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">Europe only</button>
+          <button onclick="selectLocGroup('gulf')"   style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer">Gulf only</button>
+        </div>
+
+        <div id="locOptions"></div>
+      </div>
+    </div>
+
+    <!-- Hidden value used by searchLinkedIn() -->
+    <input type="hidden" id="searchLocation" value="">
     <div style="margin-top:12px">
       <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.5px;margin-bottom:8px">PROFILE-MATCHED QUERIES</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px" id="presetBtns">
@@ -929,6 +962,120 @@ function togglePreset(el, query) {
   el.classList.toggle('active-preset');
 }
 
+// ── Location multi-select ───────────────────────────────────────────────────
+const LOC_GROUPS = {
+  europe: ["UK","Ireland","Netherlands","Belgium","Luxembourg","Germany","Austria","Switzerland","France","Spain","Portugal","Denmark","Sweden","Norway","Finland","Poland","Czechia"],
+  gulf:   ["UAE","Saudi Arabia","Qatar","Bahrain","Kuwait","Jordan"],
+  africa: ["South Africa","Egypt","Morocco"],
+};
+const LOC_ALL = [...LOC_GROUPS.europe, ...LOC_GROUPS.gulf, ...LOC_GROUPS.africa];
+const LOC_FLAGS = {
+  "UK":"🇬🇧","Ireland":"🇮🇪","Netherlands":"🇳🇱","Belgium":"🇧🇪","Luxembourg":"🇱🇺",
+  "Germany":"🇩🇪","Austria":"🇦🇹","Switzerland":"🇨🇭","France":"🇫🇷","Spain":"🇪🇸",
+  "Portugal":"🇵🇹","Denmark":"🇩🇰","Sweden":"🇸🇪","Norway":"🇳🇴","Finland":"🇫🇮",
+  "Poland":"🇵🇱","Czechia":"🇨🇿","UAE":"🇦🇪","Saudi Arabia":"🇸🇦","Qatar":"🇶🇦",
+  "Bahrain":"🇧🇭","Kuwait":"🇰🇼","Jordan":"🇯🇴","South Africa":"🇿🇦","Egypt":"🇪🇬","Morocco":"🇲🇦",
+};
+let selectedLocs = new Set(); // empty = EMEA all
+
+function initLocDropdown() {
+  const container = document.getElementById('locOptions');
+  const groups = [
+    { label: '🇪🇺 Europe', countries: LOC_GROUPS.europe },
+    { label: '🌙 Gulf & Middle East', countries: LOC_GROUPS.gulf },
+    { label: '🌍 Africa', countries: LOC_GROUPS.africa },
+  ];
+  container.innerHTML = groups.map(g => `
+    <div style="font-size:10px;font-weight:700;color:#475569;letter-spacing:1px;margin:8px 0 4px">${g.label}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">
+      ${g.countries.map(c => `
+        <div class="loc-opt" data-country="${c}" onclick="toggleLoc('${c}')" style="
+          display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;
+          background:#1e293b;border:1px solid #334155;cursor:pointer;font-size:12px;color:#94a3b8;
+          transition:all 0.15s">
+          ${LOC_FLAGS[c]||'🌐'} ${c}
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+function toggleLoc(country) {
+  if (selectedLocs.has(country)) selectedLocs.delete(country);
+  else selectedLocs.add(country);
+  updateLocUI();
+}
+
+function selectLocGroup(group) {
+  if (group === 'all')    { selectedLocs.clear(); }
+  else if (group === 'none')   { selectedLocs = new Set(LOC_ALL); LOC_ALL.forEach(c => selectedLocs.add(c)); selectedLocs.clear(); selectedLocs = new Set(); /* clear */ }
+  else if (group === 'europe') { selectedLocs = new Set(LOC_GROUPS.europe); }
+  else if (group === 'gulf')   { selectedLocs = new Set(LOC_GROUPS.gulf); }
+  updateLocUI();
+}
+
+function updateLocUI() {
+  const tags    = document.getElementById('locTags');
+  const ph      = document.getElementById('locPlaceholder');
+  const label   = document.getElementById('locLabel');
+  const hidden  = document.getElementById('searchLocation');
+
+  // Update option pill styles
+  document.querySelectorAll('.loc-opt').forEach(el => {
+    const c = el.dataset.country;
+    const sel = selectedLocs.size === 0 || selectedLocs.has(c); // all selected when empty
+    el.style.background     = sel ? 'rgba(59,130,246,0.15)' : '#1e293b';
+    el.style.borderColor    = sel ? '#3b82f6' : '#334155';
+    el.style.color          = sel ? '#60a5fa' : '#64748b';
+  });
+
+  if (selectedLocs.size === 0) {
+    // All EMEA
+    ph.style.display  = 'block';
+    tags.style.display= 'none';
+    ph.textContent    = '🌍 All EMEA — 25 countries';
+    label.textContent = '— EMEA (all 25 countries)';
+    hidden.value      = '';
+  } else {
+    ph.style.display  = 'none';
+    tags.style.display= 'flex';
+    tags.innerHTML    = [...selectedLocs].map(c =>
+      `<span style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);
+        padding:2px 8px;border-radius:5px;font-size:11px;display:inline-flex;align-items:center;gap:4px">
+        ${LOC_FLAGS[c]||''} ${c}
+        <span onclick="event.stopPropagation();toggleLoc('${c}')" style="cursor:pointer;color:#475569;font-size:14px;line-height:1">×</span>
+      </span>`
+    ).join('');
+    label.textContent = `— ${selectedLocs.size} countr${selectedLocs.size===1?'y':'ies'} selected`;
+    hidden.value      = [...selectedLocs].join(',');
+  }
+}
+
+function filterLocOptions(q) {
+  document.querySelectorAll('.loc-opt').forEach(el => {
+    el.style.display = el.dataset.country.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function toggleLocDropdown() {
+  const dd    = document.getElementById('locDropdown');
+  const arrow = document.getElementById('locArrow');
+  const open  = dd.style.display === 'none';
+  dd.style.display = open ? 'block' : 'none';
+  arrow.textContent = open ? '▴' : '▾';
+  if (open) document.getElementById('locSearch').focus();
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  if (!document.getElementById('locWrapper')?.contains(e.target)) {
+    const dd = document.getElementById('locDropdown');
+    if (dd) { dd.style.display='none'; document.getElementById('locArrow').textContent='▾'; }
+  }
+});
+
+// Init on load
+document.addEventListener('DOMContentLoaded', () => { initLocDropdown(); updateLocUI(); });
+
+// ── Search ──────────────────────────────────────────────────────────────────
 async function searchLinkedIn() {
   const location = document.getElementById('searchLocation').value.trim();
 

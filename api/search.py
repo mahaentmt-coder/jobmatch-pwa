@@ -121,15 +121,11 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "RAPIDAPI_KEY environment variable not set"}, 500)
                 return
 
-            loc_lower = location.lower()
-            is_emea   = not location or any(k in loc_lower for k in ["emea", "worldwide", "global", "remote"])
+            # location can be: "" (all EMEA), "UK,UAE,Ireland" (comma-separated), or single country
+            selected = [l.strip() for l in location.split(',') if l.strip()] if location else []
+            countries = selected if selected else EMEA_LOCATIONS
 
-            queries = []
-            if is_emea:
-                for country in EMEA_LOCATIONS:
-                    queries.append(f"{title} in {country}")
-            else:
-                queries.append(f"{title} in {location}")
+            queries = [f"{title} in {c}" for c in countries]
 
             errors = []
 
