@@ -1246,13 +1246,13 @@ function renderSearchResults() {
   pageJobs.forEach((j, pi) => {
     const i = start + pi;
     if (j._score !== undefined) _paintBadge(i, j._score, j._rec);
-    if ((j._score || 0) >= 80) {
+    if ((j._score || 0) >= 75) {
       const card = document.getElementById(`sjob-${i}`);
       if (card && !card.querySelector('.gen-cv-btn')) {
         const actions = card.querySelector('.job-card-actions');
         const b = document.createElement('button');
         b.className = 'btn btn-success btn-sm gen-cv-btn';
-        b.innerHTML = '📄 CV';
+        b.innerHTML = '📋 Apply';
         b.onclick = () => generateCV(i);
         actions.prepend(b);
       }
@@ -1326,13 +1326,13 @@ async function scoreJob(i) {
     }
 
     // Show Generate CV button for high-scoring jobs
-    if (score >= 80) {
+    if (score >= 75) {
       const card = document.getElementById(`sjob-${i}`);
       if (card && !card.querySelector('.gen-cv-btn')) {
         const actions = card.querySelector('.job-card-actions');
         const btn = document.createElement('button');
         btn.className = 'btn btn-success btn-sm gen-cv-btn';
-        btn.innerHTML = '📄 Generate CV';
+        btn.innerHTML = '📋 Generate Application';
         btn.onclick = () => generateCV(i);
         actions.prepend(btn);
       }
@@ -1360,13 +1360,13 @@ async function scoreAllJobs() {
 
   // Add "Generate CV" buttons for 80+ jobs
   searchedJobs.forEach((j, i) => {
-    if ((j._score || 0) >= 80) {
+    if ((j._score || 0) >= 75) {
       const card = document.getElementById(`sjob-${i}`);
       if (card && !card.querySelector('.gen-cv-btn')) {
         const actions = card.querySelector('.job-card-actions');
         const b = document.createElement('button');
         b.className = 'btn btn-success btn-sm gen-cv-btn';
-        b.innerHTML = '📄 CV';
+        b.innerHTML = '📋 Apply';
         b.onclick = () => generateCV(i);
         actions.prepend(b);
       }
@@ -1694,11 +1694,33 @@ async function generateCV(i) {
     });
     const d = await res.json();
     if (d.error) throw new Error(d.error);
+
+    // Auto-save to Applications page with "Applied" status
+    if (!jobs.find(x => x.id === j.id)) {
+      jobs.unshift({
+        id:          j.id || Date.now().toString(),
+        title:       j.title,
+        company:     j.company,
+        location:    j.location,
+        description: j.description,
+        url:         j.url,
+        added:       new Date().toLocaleDateString(),
+        status:      'Applied',
+        score:       j._score || null,
+      });
+      saveJobs();
+      renderJobList();
+      renderJobSelects();
+      toast(`📋 Saved to Applications & generating PDF…`);
+    } else {
+      toast(`📋 Generating application PDF…`);
+    }
+
     renderCVPDF(d);
   } catch(e) {
     toast('❌ ' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '📄 Generate CV'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '📋 Generate Application'; }
   }
 }
 
@@ -1706,64 +1728,102 @@ function renderCVPDF(d) {
   const expHtml = (d.experience || []).map(role => `
     <div class="role">
       <div class="role-title">${role.title}</div>
-      <div class="role-meta">${role.company} | ${role.location} | ${role.dates}</div>
+      <div class="role-meta">${role.company} &nbsp;|&nbsp; ${role.location} &nbsp;|&nbsp; ${role.dates}</div>
       <ul>${(role.bullets || []).map(b => `<li>${b}</li>`).join('')}</ul>
     </div>`).join('');
 
   const eduHtml = (d.education || []).map(e =>
-    `<div><strong>${e.degree}</strong> — ${e.school} | ${e.years}</div>`).join('');
+    `<div style="margin-bottom:4px"><strong>${e.degree}</strong> — ${e.school} | ${e.years}</div>`).join('');
 
   const certHtml = (d.certifications || []).map(c =>
-    `<div>${c}</div>`).join('');
+    `<div style="margin-bottom:3px">${c}</div>`).join('');
 
   const skillsHtml = Object.entries(d.skills || {}).map(([k,v]) =>
-    `<div><strong>${k}:</strong> ${v}</div>`).join('');
+    `<div style="margin-bottom:4px"><strong>${k}:</strong> ${v}</div>`).join('');
+
+  // Cover letter paragraphs
+  const clParas = (d.cover_letter || '').split(/\n+/).filter(p => p.trim())
+    .map(p => `<p style="margin:0 0 14px">${p.trim()}</p>`).join('');
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>${d.name} — ${d.job_title} @ ${d.company}</title>
+<title>${d.name} — Application for ${d.job_title} @ ${d.company}</title>
 <style>
-  body { font-family: Arial, sans-serif; max-width: 820px; margin: 0 auto; padding: 32px 40px; color: #1a1a1a; font-size: 13px; line-height: 1.5; }
-  h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px; color: #0a0f1e; }
-  .headline { color: #2563eb; font-size: 13px; margin-bottom: 4px; }
-  .contact { font-size: 12px; color: #555; margin-bottom: 16px; border-bottom: 2px solid #e5e7eb; padding-bottom: 12px; }
-  h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #2563eb; border-bottom: 1px solid #dbeafe; padding-bottom: 3px; margin: 18px 0 8px; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Arial', sans-serif; color: #1a1a1a; font-size: 13px; line-height: 1.55; margin: 0; padding: 0; }
+  .page { max-width: 820px; margin: 0 auto; padding: 36px 44px; }
+  .page-break { page-break-before: always; }
+  h1  { font-size: 28px; font-weight: 700; margin: 0 0 3px; color: #0f172a; letter-spacing: -0.5px; }
+  .headline { color: #2563eb; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .contact  { font-size: 11.5px; color: #555; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 2px solid #2563eb; }
+  h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px;
+       color: #2563eb; border-bottom: 1px solid #dbeafe; padding-bottom: 3px; margin: 16px 0 8px; }
   .role-title { font-weight: 700; font-size: 13px; margin-bottom: 1px; }
-  .role-meta { font-size: 11px; color: #555; margin-bottom: 5px; }
-  .role { margin-bottom: 14px; }
+  .role-meta  { font-size: 11px; color: #555; margin-bottom: 5px; }
+  .role { margin-bottom: 13px; }
   ul { margin: 0; padding-left: 16px; }
   li { margin-bottom: 3px; }
-  @page { margin: 15mm 18mm; }
-  @media print { body { padding: 0; } }
+  /* Cover letter page */
+  .cl-header { border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 24px; }
+  .cl-body   { font-size: 13.5px; line-height: 1.7; color: #1a1a1a; }
+  .cl-sign   { margin-top: 28px; }
+  @page { margin: 14mm 16mm; }
+  @media print { body { padding: 0; } .page { padding: 0; } }
 </style>
 </head>
 <body>
-<h1>${d.name}</h1>
-<div class="headline">${d.headline || ''}</div>
-<div class="contact">${d.contact}</div>
 
-<h2>Professional Summary</h2>
-<p>${d.summary || ''}</p>
+<!-- ═══ PAGE 1: TAILORED CV ═══ -->
+<div class="page">
+  <h1>${d.name}</h1>
+  <div class="headline">${d.headline || ''}</div>
+  <div class="contact">${d.contact}</div>
 
-<h2>Experience</h2>
-${expHtml}
+  <h2>Professional Summary</h2>
+  <p style="margin:0 0 4px">${d.summary || ''}</p>
 
-<h2>Education</h2>
-${eduHtml}
+  <h2>Experience</h2>
+  ${expHtml}
 
-<h2>Certifications</h2>
-${certHtml}
+  <h2>Education</h2>
+  ${eduHtml}
 
-<h2>Core Skills</h2>
-${skillsHtml}
+  <h2>Certifications</h2>
+  ${certHtml}
+
+  <h2>Core Skills</h2>
+  ${skillsHtml}
+</div>
+
+<!-- ═══ PAGE 2: COVER LETTER ═══ -->
+<div class="page page-break">
+  <div class="cl-header">
+    <h1>${d.name}</h1>
+    <div class="contact" style="border:none;margin:0;padding:0">${d.contact}</div>
+  </div>
+
+  <div style="margin-bottom:18px">
+    <div style="font-weight:700;font-size:14px;color:#0f172a">${d.job_title}</div>
+    <div style="font-size:12px;color:#555">${d.company}</div>
+  </div>
+
+  <div class="cl-body">
+    ${clParas || '<p>Cover letter not available.</p>'}
+  </div>
+
+  <div class="cl-sign">
+    <div style="margin-bottom:28px;font-size:13px">Yours sincerely,</div>
+    <div style="font-weight:700;font-size:14px">${d.name}</div>
+    <div style="font-size:12px;color:#555">${d.contact}</div>
+  </div>
+</div>
 
 <script>window.onload = () => window.print();<\/script>
 </body>
 </html>`;
 
-  // Blob URL avoids popup blocker (window.open after async fetch is blocked)
   const blob = new Blob([html], { type: 'text/html' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -1771,7 +1831,7 @@ ${skillsHtml}
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
 
 // ── PDF Export ─────────────────────────────────────────────────────────────
@@ -1885,6 +1945,9 @@ function showScoreDetails(i) {
   if (j.url) { applyBtn.href = j.url; applyBtn.style.display = 'flex'; }
   else        { applyBtn.style.display = 'none'; }
 
+  // Show PDF button only for 75+ scores
+  document.getElementById('sm-pdf').style.display = score >= 75 ? '' : 'none';
+
   document.getElementById('scoreModal').style.display = 'flex';
 }
 
@@ -1896,6 +1959,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Wire up static modal buttons
   document.getElementById('sm-close').addEventListener('click',  closeScoreModal);
   document.getElementById('sm-close2').addEventListener('click', closeScoreModal);
+  document.getElementById('sm-pdf').addEventListener('click', () => {
+    if (_modalJobIndex !== null) {
+      const btn = document.getElementById('sm-pdf');
+      btn.disabled = true;
+      btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="spinner" style="width:12px;height:12px;border-width:2px"></span> Generating…</span>';
+      generateCV(_modalJobIndex).finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '📋 Generate Application';
+      });
+    }
+  });
   document.getElementById('sm-tailor').addEventListener('click', () => {
     closeScoreModal();
     if (_modalJobIndex !== null) tailorJob(_modalJobIndex);
@@ -1954,6 +2028,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeScoreMo
         text-align:center;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;
         text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px;
         display:flex;align-items:center;justify-content:center">🔗 Apply Now</a>
+      <button id="sm-pdf" style="flex:1;min-width:120px;background:rgba(16,185,129,0.15);
+        color:#34d399;border:1px solid rgba(16,185,129,0.3);padding:10px 16px;
+        border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">📋 Generate Application</button>
       <button id="sm-tailor" style="flex:1;min-width:120px;background:rgba(139,92,246,0.15);
         color:#a78bfa;border:1px solid rgba(139,92,246,0.3);padding:10px 16px;
         border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">✍️ Tailor CV</button>

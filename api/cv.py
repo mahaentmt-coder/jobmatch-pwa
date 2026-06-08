@@ -97,14 +97,14 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "job_description required"}, 400)
                 return
 
-            prompt = f"""You are an expert CV writer. Tailor Hadi Mirisaee's CV for this specific job.
+            prompt = f"""You are an expert CV writer and career coach. Tailor Hadi Mirisaee's application for this specific job.
 
 JOB TITLE: {job_title}
 COMPANY: {company}
 JOB DESCRIPTION:
 {job_description[:3000]}
 
-HADI'S CURRENT EXPERIENCE (tailor bullet points to match job keywords and requirements):
+HADI'S CURRENT EXPERIENCE:
 {json.dumps(EXPERIENCE, indent=2)[:3000]}
 
 Return ONLY a valid JSON object with this exact structure:
@@ -122,19 +122,20 @@ Return ONLY a valid JSON object with this exact structure:
   ],
   "skills": {{
     "Programme Delivery": "<tailored skill description>",
-    "Financial Services": "<tailored skill description>",
+    "Digital Transformation": "<tailored skill description>",
     "Agile at Scale": "<tailored skill description>",
     "Stakeholder Management": "<tailored skill description>",
-    "AI & Digital Transformation": "<tailored skill description>"
-  }}
+    "AI & Cloud Strategy": "<tailored skill description>"
+  }},
+  "cover_letter": "<3 short punchy paragraphs, NO 'Dear Hiring Manager' opener — start with a bold hook sentence about Hadi's value for THIS role. Para 1: hook + why this role. Para 2: 2-3 specific achievements that directly answer the JD requirements (use numbers). Para 3: confident closing with a call to action. Max 200 words total. No clichés. No 'I am writing to apply'.>"
 }}
 
 Rules:
 - Keep all 5 experience roles, same companies/dates/locations
 - Rewrite bullets to mirror the job's language and priorities
-- Front-load the most relevant experience
 - Keep bullets concise and quantified where possible
-- The headline and summary must use the job's exact keywords"""
+- The headline and summary must use the job's exact keywords
+- Cover letter must be punchy, specific, and read like it was written by a confident senior executive"""
 
             result = self._call_claude(prompt)
             data   = json.loads(self._extract_json(result))
