@@ -140,13 +140,28 @@ function checkNewJobAlerts() {
   const sweepJobs = searchJSearch_();
   Logger.log(`Jobs from JSearch sweep: ${sweepJobs.length}`);
 
-  // ── Step 3: Merge (no duplicates)
+  // ── Step 3: Load previously reported job IDs (last 7 days) to skip them
+  const seenProps  = PropertiesService.getScriptProperties();
+  const seenRaw    = seenProps.getProperty("reportedIds") || "{}";
+  const seenMap    = JSON.parse(seenRaw);                    // { id: timestamp }
+  const cutoff     = now - 7 * 24 * 60 * 60 * 1000;         // 7-day rolling window
+  // Prune entries older than 7 days
+  Object.keys(seenMap).forEach(k => { if (seenMap[k] < cutoff) delete seenMap[k]; });
+  const reportedIds = new Set(Object.keys(seenMap));
+  Logger.log(`Previously reported IDs in last 7 days: ${reportedIds.size}`);
+
+  // ── Step 3b: Merge (no duplicates, skip already-reported)
   const merged = [...emailJobs];
   for (const j of sweepJobs) {
     const key = j.title.toLowerCase();
-    if (!titlesSeen.has(key)) { titlesSeen.add(key); merged.push(j); }
+    if (titlesSeen.has(key)) continue;
+    titlesSeen.add(key);
+    // Skip job if already reported this week (use title+company as stable ID)
+    const stableId = `${j.title}|${j.company}`.toLowerCase().replace(/\s+/g, " ");
+    if (reportedIds.has(stableId)) { Logger.log(`  skip (already reported): ${j.title}`); continue; }
+    merged.push(j);
   }
-  Logger.log(`Total unique jobs before pre-rank: ${merged.length}`);
+  Logger.log(`Total unique new jobs before pre-rank: ${merged.length}`);
   if (!merged.length) { Logger.log("Nothing to score — exiting."); return; }
 
   // ── Step 3b: Pre-rank by title relevance, keep top MAX_TO_SCORE
@@ -181,6 +196,14 @@ function checkNewJobAlerts() {
 
   const allCount = scored.length;
   Logger.log(`Scored ${allCount} jobs — ${topJobs.length} scored 70+`);
+
+  // ── Save reported IDs so they won't appear again this week
+  topJobs.forEach(j => {
+    const stableId = `${j.title}|${j.company}`.toLowerCase().replace(/\s+/g, " ");
+    seenMap[stableId] = now;
+  });
+  seenProps.setProperty("reportedIds", JSON.stringify(seenMap));
+  Logger.log(`Saved ${topJobs.length} reported IDs (total stored: ${Object.keys(seenMap).length})`);
 
   if (!topJobs.length) {
     // Send a brief "no strong matches today" note rather than nothing
