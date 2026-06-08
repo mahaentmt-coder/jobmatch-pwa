@@ -1188,7 +1188,7 @@ function renderSearchResults() {
           <div class="job-card-sub">${meta}</div>
           ${pills ? `<div class="tags" style="margin-top:6px">${pills}</div>` : ''}
         </div>
-        <div id="score-badge-${i}" class="score-badge-ring"></div>
+        <div id="score-badge-${i}" class="score-badge-ring" onclick="showScoreDetails(${i})" style="cursor:pointer" title="Click for match details"></div>
       </div>
       <div id="tailor-result-${i}"></div>
       <div class="job-card-actions">
@@ -1275,9 +1275,6 @@ function _paintBadge(i, score, rec) {
   const color   = score >= 75 ? 'var(--success)' : score >= 55 ? 'var(--gold)' : 'var(--danger)';
   const ringCls = score >= 75 ? 'ring-high' : score >= 55 ? 'ring-mid' : 'ring-low';
   badge.className = `score-badge-ring ${ringCls}`;
-  badge.style.cursor = 'pointer';
-  badge.title = 'Click for match details';
-  badge.onclick = () => showScoreDetails(i);
   badge.innerHTML = `
     <div style="font-family:var(--mono);font-size:17px;font-weight:600;color:${color};line-height:1">${score}</div>
     <div style="font-size:8px;color:var(--muted);margin-top:2px;text-align:center;line-height:1.2">${(rec||'').split(' ')[0]}</div>`;
@@ -1848,7 +1845,13 @@ if ('serviceWorker' in navigator) {
 // ── Score Details Modal ─────────────────────────────────────────────────────
 function showScoreDetails(i) {
   const j = searchedJobs[i];
-  if (!j || j._score == null) { toast('⚠️ Score this job first'); return; }
+  if (!j) return;
+  if (j._score == null) {
+    // Not yet scored — trigger scoring, then re-open modal when done
+    toast('⏳ Scoring now — click again in a moment');
+    scoreJob(i).then(() => { if (searchedJobs[i]._score != null) showScoreDetails(i); });
+    return;
+  }
 
   const score     = j._score;
   const color     = score >= 75 ? '#10b981' : score >= 55 ? '#f59e0b' : '#ef4444';
