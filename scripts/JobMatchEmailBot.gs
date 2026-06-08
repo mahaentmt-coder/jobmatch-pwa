@@ -93,6 +93,9 @@ const SEARCH_QUERIES = [
   "Strategy Director Digital",
 ];
 
+// Only keep jobs from LinkedIn or Indeed
+const ALLOWED_PUBLISHERS = ["linkedin", "indeed"];
+
 const JUNIOR_TITLE_SIGNALS = [
   "junior", "graduate", "intern", "entry level", "apprentice",
   "assistant", "coordinator", "administrator", "support",
@@ -256,6 +259,8 @@ function searchJSearch_() {
       for (const j of jobs) {
         if (!j.id || seen.has(j.id)) continue;
         seen.add(j.id);
+        const pub = (j.publisher || "").toLowerCase();
+        if (!ALLOWED_PUBLISHERS.some(a => pub.includes(a))) continue;
         results.push({
           title:    j.title    || "",
           company:  j.company  || "",

@@ -13,20 +13,15 @@ EMEA_LOCATIONS = [
     "UK", "Netherlands", "UAE", "Ireland", "Germany",
 ]
 
-# Block known low-quality / spam aggregators only — everything else passes
-BLOCKED_PUBLISHERS = {
-    "joblead", "trabjao", "learn4good", "jobilize", "trovit",
-    "jobomas", "jobtome", "jobrapido", "jobsora", "careerjet",
-    "neuvoo", "talent.com", "jobissite", "whatjobs",
-    "jobvacancies", "jobboard", "jobberman",
-}
+# Whitelist: only LinkedIn and Indeed
+ALLOWED_PUBLISHERS = {"linkedin", "indeed"}
 
 def is_trusted_publisher(publisher: str) -> bool:
-    """Return False only for known junk aggregators; keep everything else."""
+    """Only allow LinkedIn and Indeed; drop everything else."""
     if not publisher:
-        return True  # no publisher field = direct employer posting, always keep
+        return False  # no publisher = unknown aggregator, skip
     p = publisher.lower()
-    return not any(b in p for b in BLOCKED_PUBLISHERS)
+    return any(a in p for a in ALLOWED_PUBLISHERS)
 
 # Patterns that indicate a non-English language is REQUIRED
 # Matches things like "Dutch required", "fluent in German", "native French speaker"
