@@ -1,4 +1,4 @@
-const CACHE = 'jobmatch-v1';
+const CACHE = 'jobmatch-v6';
 const ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', e => {
