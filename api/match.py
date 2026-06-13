@@ -25,9 +25,11 @@ class handler(BaseHTTPRequestHandler):
                 self._json({"error": "resume_text and job_description are required"}, 400)
                 return
 
-            prompt = f"""You are an expert ATS and recruitment specialist. Analyse the resume against the job description.
+            prompt = f"""You are a senior recruiter scoring a candidate's CV against a job description.
+The candidate is Hadi Mirisaee — a Director/Executive-level Digital Transformation leader.
+His target level is Director, Head of, VP, or equivalent senior leadership roles.
 
-RESUME (first 3000 chars):
+CANDIDATE CV (first 3000 chars):
 {resume_text[:3000]}
 
 JOB TITLE: {job_title}
@@ -35,15 +37,25 @@ COMPANY: {company}
 JOB DESCRIPTION (first 2500 chars):
 {job_description[:2500]}
 
+SCORING RULES — apply strictly:
+- Start at 50. Add/subtract points based on the criteria below.
+- Seniority match: +20 if the role is Director/Head/VP/Principal/Partner level. -20 if it is Senior Manager or below (PM, Senior PM, Manager, Team Lead, etc.). These are NOT the right level for this candidate.
+- Skills match: up to +20 for direct skill overlap (digital transformation, programme delivery, AI, cloud, agile, stakeholder management, etc.)
+- Industry/domain fit: up to +10 for relevant industry (financial services, tech, consulting, healthcare)
+- Location/remote fit: up to +5 if location is EMEA and open/remote
+- Deal-breakers: -15 if non-English language is REQUIRED; -10 if the role is clearly technical/hands-on engineering (not leadership)
+
+The score MUST meaningfully differentiate roles. A Senior PM role must score LOWER than a Director role. Never give the same score to clearly different job levels.
+
 Respond ONLY with a valid JSON object (no markdown, no preamble, no backticks).
 ALL array fields MUST contain real values — never return empty arrays.
 
 {{
-  "match_score": <integer 0-100>,
+  "match_score": <integer 0-100 — must reflect seniority match strictly>,
   "matched_keywords": ["<5-7 specific skills/keywords from the JD that ARE in the resume>"],
   "missing_keywords": ["<4-6 specific skills/keywords from the JD that are NOT in the resume>"],
-  "strengths": ["<3-4 specific strengths Hadi brings that directly match this role>"],
-  "gaps": ["<2-4 specific gaps or areas where Hadi's profile falls short for this role>"],
+  "strengths": ["<3-4 specific strengths Hadi brings for this exact role>"],
+  "gaps": ["<2-4 honest gaps or reasons this role may not be right>"],
   "recommendation": "<one of: Apply now | Apply with tailoring | Skip>"
 }}"""
 

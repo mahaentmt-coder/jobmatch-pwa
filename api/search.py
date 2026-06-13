@@ -125,7 +125,15 @@ class handler(BaseHTTPRequestHandler):
             selected = [l.strip() for l in location.split(',') if l.strip()] if location else []
             countries = selected if selected else EMEA_LOCATIONS
 
-            queries = [f"{title} in {c}" for c in countries]
+            # If the title doesn't already specify a senior level, bias toward Director/Head/VP
+            title_lower = title.lower()
+            senior_signals = ["director", "head", "vp", "vice president", "principal", "partner", "chief", "cto", "cio", "cdo"]
+            if not any(s in title_lower for s in senior_signals):
+                search_title = f"Director OR Head {title}"
+            else:
+                search_title = title
+
+            queries = [f"{search_title} in {c}" for c in countries]
 
             errors = []
 
@@ -191,17 +199,18 @@ class handler(BaseHTTPRequestHandler):
                 # Infer seniority from title
                 if any(w in title_lower for w in ["chief", "cto", "cio", "cdo", "vp", "vice president"]):
                     seniority = "Executive"
-                elif any(w in title_lower for w in ["director", "head of", "principal"]):
+                elif any(w in title_lower for w in ["director", "head of", "head,", "head-", "principal", "partner"]):
                     seniority = "Director"
-                elif any(w in title_lower for w in ["senior", "lead", "manager", "architect"]):
+                elif any(w in title_lower for w in ["senior", "lead", "manager", "architect", "consultant"]):
                     seniority = "Senior"
                 elif any(w in title_lower for w in ["junior", "graduate", "intern", "entry"]):
                     seniority = "Junior"
                 else:
                     seniority = "Mid"
 
-                # Skip junior/entry-level roles — not relevant for Director+ search
-                if seniority == "Junior":
+                # Skip clearly below-Director roles
+                # "Senior" is kept — "Senior Director" / "Senior VP" are valid; scorer will penalize plain Senior PM/Manager
+                if seniority in ("Junior", "Mid"):
                     skip_jnr += 1; continue
 
                 # Skip clearly junior salaries (annual < 60k in GBP/EUR/USD)

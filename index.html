@@ -740,13 +740,17 @@
     <!-- Hidden value used by searchLinkedIn() -->
     <input type="hidden" id="searchLocation" value="">
     <div style="margin-top:12px">
-      <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.5px;margin-bottom:8px">PROFILE-MATCHED QUERIES</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.5px">SEARCH QUERIES</div>
+        <button id="suggestBtn" onclick="generateQuerySuggestions()" style="
+          font-size:11px;padding:4px 12px;border-radius:6px;border:1px solid #3b82f6;
+          background:rgba(59,130,246,0.1);color:#60a5fa;cursor:pointer;font-weight:600;
+          display:flex;align-items:center;gap:5px">
+          ✨ Generate from Profile
+        </button>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px" id="presetBtns">
-        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'Digital Transformation Director or Manager')">🔄 Digital Transformation</button>
-        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'Programme Director or Head')">📋 Programme Director</button>
-        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'AI Data Director or Lead')">🤖 AI & Data</button>
-        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'IT Program Manager Senior')">💻 IT Program Manager</button>
-        <button class="btn btn-secondary btn-sm preset-q active-preset" onclick="togglePreset(this,'Strategy Director or Consultant')">🎯 Strategy Director</button>
+        <!-- populated by initPresets() or generateQuerySuggestions() -->
       </div>
     </div>
     <button class="btn btn-primary" id="searchBtn" onclick="searchLinkedIn()" style="margin-top:12px">🔍 Search All Queries</button>
@@ -959,8 +963,68 @@ let searchedJobs = []; // holds current search results
 let currentPage  = 0;
 const PAGE_SIZE  = 20;
 
+// Default queries shown before profile-based generation
+const DEFAULT_QUERIES = [
+  { label: '🔄 Digital Transformation', q: 'Director OR Head Digital Transformation' },
+  { label: '📋 Programme Director',     q: 'Programme Director OR Head of Delivery' },
+  { label: '🤖 AI & Data Director',     q: 'Director AI Data Strategy OR Head of AI' },
+  { label: '☁️ Cloud & Tech Director',  q: 'Technology Director OR Head of Technology Cloud' },
+  { label: '🎯 Strategy Director',      q: 'Director Strategy Execution Transformation' },
+  { label: '🏢 Consulting Partner',     q: 'Partner OR Principal Consultant Digital Strategy' },
+];
+
+let activeQueries = []; // {label, q} objects currently active
+
+function renderPresets(list) {
+  const container = document.getElementById('presetBtns');
+  activeQueries = [...list];
+  container.innerHTML = list.map((item, i) => `
+    <button class="btn btn-secondary btn-sm preset-q active-preset"
+      data-idx="${i}" onclick="togglePresetIdx(this, ${i})">${item.label}</button>
+  `).join('');
+}
+
+function togglePresetIdx(el, i) {
+  el.classList.toggle('active-preset');
+}
+
 function togglePreset(el, query) {
   el.classList.toggle('active-preset');
+}
+
+function initPresets() {
+  // Load saved queries from localStorage if profile-generated before
+  const saved = localStorage.getItem('jm_queries');
+  if (saved) {
+    try { renderPresets(JSON.parse(saved)); return; } catch(e) {}
+  }
+  renderPresets(DEFAULT_QUERIES);
+}
+
+async function generateQuerySuggestions() {
+  if (!resume) { toast('⚠️ Save your resume first (Profile tab)'); return; }
+  const btn = document.getElementById('suggestBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:2px"></span> Generating…';
+  try {
+    const res = await fetch('/api/suggest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_text: resume })
+    });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    const icons = ['🔄','📋','🤖','☁️','🎯','🏢','💡','🌐'];
+    const list = d.queries.map((q, i) => ({ label: `${icons[i] || '🔹'} ${q}`, q }));
+    renderPresets(list);
+    localStorage.setItem('jm_queries', JSON.stringify(list));
+    toast(`✅ ${list.length} queries generated from your profile`);
+  } catch(e) {
+    toast('❌ ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Generate from Profile';
+  }
 }
 
 // ── Location multi-select ───────────────────────────────────────────────────
@@ -1080,9 +1144,11 @@ document.addEventListener('DOMContentLoaded', () => { initLocDropdown(); updateL
 async function searchLinkedIn() {
   const location = document.getElementById('searchLocation').value.trim();
 
-  // Collect all active preset queries
-  const activePresets = [...document.querySelectorAll('.preset-q.active-preset')]
-    .map(b => b.getAttribute('onclick').match(/'([^']+)'/)?.[1]).filter(Boolean);
+  // Collect active queries from activeQueries array (toggled via active-preset class)
+  const activeBtns = [...document.querySelectorAll('.preset-q.active-preset')];
+  const activePresets = activeBtns
+    .map(b => activeQueries[parseInt(b.dataset.idx)]?.q)
+    .filter(Boolean);
 
   if (!activePresets.length) { toast('⚠️ Select at least one query'); return; }
 
@@ -1938,6 +2004,8 @@ function closeScoreModal() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initPresets();
+
   // Wire up static modal buttons
   document.getElementById('sm-close').addEventListener('click',  closeScoreModal);
   document.getElementById('sm-close2').addEventListener('click', closeScoreModal);
